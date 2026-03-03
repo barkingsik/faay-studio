@@ -932,6 +932,13 @@
     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">출결 상태</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
       <button class="action-chip chip-checkin" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminStatus('present')">✅ 입실 처리 (현재 시각 기록)</button>
+      <div id="mst-checkout-wrap" style="display:none;flex-direction:column;gap:6px;">
+        <button class="action-chip chip-checkout" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminCheckout()">🚪 퇴실 처리 (현재 시각 기록)</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="time" id="mst-checkout-time" style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);">
+          <button class="action-chip chip-checkout" style="padding:9px 14px;font-size:12px;border-radius:10px;white-space:nowrap;" onclick="adminCheckoutManual()">시각 지정 퇴실</button>
+        </div>
+      </div>
       <button class="action-chip chip-noshow" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminStatus('noshow')">🚫 미사용으로 변경</button>
       <button class="action-chip chip-checkout" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminStatus('pending')">⏳ 초기화</button>
     </div>
@@ -1797,14 +1804,19 @@ function renderAdminSeats() {
 function openAssignModal(day,time,idx) {
   S.assignTarget={day,time,idx};
   document.getElementById('ma-title').textContent=slabel(idx);
-  document.getElementById('ma-sub').textContent=`${day}요일 ${time==='am'?'오전':'오후'} · 배정 학생 선택`;
+  // 월 표시 추가
+  document.getElementById('ma-sub').textContent=`${seatEditYear}년 ${seatEditMonth+1}월 · ${day}요일 ${time==='am'?'오전':'오후'}`;
   const sel=document.getElementById('ma-sel');
   sel.innerHTML='<option value="">— 배정 없음 —</option>';
   D.students.forEach(s=>{
     const o=document.createElement('option');
     o.value=s.id; o.textContent=`${s.name} (${s.phone})`; sel.appendChild(o);
   });
-  sel.value=D.schedule[day][time][idx]||'';
+  // 현재 편집 중인 월의 스냅샷에서 값 읽기
+  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+  const snap = D.scheduleSnapshots?.[monthKey];
+  const curSid = snap ? (snap[day]?.[time]?.[idx] || '') : (D.schedule[day]?.[time]?.[idx] || '');
+  sel.value = curSid;
   openModal('modal-assign');
 }
 
@@ -1857,11 +1869,20 @@ function saveMonthlySchedule() {
   const monthKey = seatEditYear + '-' + String(seatEditMonth+1).padStart(2,'0') + '-01';
   if(!confirm((seatEditMonth+1) + '월 1일부터 현재 배치를 적용할까요?')) return;
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
-  const copy = {};
-  DAYS.forEach(d => {
-    copy[d] = { am: [...(D.schedule[d]?.am||[])], pm: [...(D.schedule[d]?.pm||[])] };
-  });
-  D.scheduleSnapshots[monthKey] = copy;
+  // 스냅샷이 없으면 기본 schedule 복사해서 생성
+  if(!D.scheduleSnapshots[monthKey]) {
+    const copy = {};
+    DAYS.forEach(d => { copy[d] = { am: [...(D.schedule[d]?.am||[])], pm: [...(D.schedule[d]?.pm||[])] }; });
+    D.scheduleSnapshots[monthKey] = copy;
+  }
+  // 이번 달이면 기본 schedule도 스냅샷과 동기화
+  const now = new Date();
+  if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
+    DAYS.forEach(d => {
+      D.schedule[d].am = [...(D.scheduleSnapshots[monthKey][d]?.am||[])];
+      D.schedule[d].pm = [...(D.scheduleSnapshots[monthKey][d]?.pm||[])];
+    });
+  }
   persist();
   showToast('✅ ' + (seatEditMonth+1) + '월 배치가 저장됐어요');
   renderSeatMonthUI();
