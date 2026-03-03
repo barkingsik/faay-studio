@@ -510,6 +510,15 @@
   .cal-day.attcal-sel { border-color: var(--body-purple) !important; background: rgba(90,80,144,0.15) !important; }
   .cal-day.sun-col { color: #e85a5a; }
   .cal-day.sat-col { color: var(--body-purple); }
+  .cal-day.holiday { color: #e85a5a !important; }
+  .cal-day.holiday::before {
+    content: ''; position:absolute; top:3px; right:3px;
+    width:4px; height:4px; border-radius:50%; background:#e85a5a;
+  }
+  .cal-day.today-highlight {
+    box-shadow: 0 0 0 2.5px var(--body-purple) !important;
+    font-weight:900;
+  }
   .cal-legend { display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; }
   .cal-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); }
   .cal-legend-dot { width:10px; height:10px; border-radius:3px; }
@@ -801,10 +810,12 @@
 
   <!-- Students -->
   <div class="admin-panel active" id="apanel-students">
-    <div class="student-list" id="student-list"></div>
-    <div style="padding:8px 20px 0">
-      <button class="add-student-btn" onclick="openStudentModal(null)">+ 새 학생 추가</button>
+    <div style="padding:14px 20px 8px;display:flex;gap:8px;align-items:center;">
+      <input type="text" id="student-search" placeholder="🔍 이름 검색..." oninput="renderStudentList()"
+        style="flex:1;padding:9px 14px;border-radius:20px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);font-family:'Noto Sans KR',sans-serif;">
+      <button class="btn-primary" style="white-space:nowrap;padding:9px 14px;" onclick="openStudentModal(null)">+ 추가</button>
     </div>
+    <div class="student-list" id="student-list"></div>
   </div>
 
   <!-- Seat schedule -->
@@ -815,6 +826,13 @@
     </div>
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body"></div>
+    <div style="margin:16px 20px 0;padding:14px;background:rgba(90,80,144,0.07);border-radius:14px;border:1.5px solid var(--tag-border);">
+      <div style="font-size:12px;font-weight:700;color:var(--body-purple);margin-bottom:10px;">📅 날짜 지정 배치 변경</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.6;">현재 배치를 특정 날짜부터 적용되는 새 배치로 저장해요.<br>그 날짜 이후 학생들에게 변경된 배치가 표시돼요.</div>
+      <input type="date" id="snap-date" style="width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);margin-bottom:8px;box-sizing:border-box;">
+      <button class="btn-primary" onclick="saveScheduleSnapshot()">이 날짜부터 현재 배치 적용</button>
+      <div id="snap-list" style="margin-top:12px;"></div>
+    </div>
   </div>
 
   <!-- Status view -->
@@ -952,7 +970,7 @@ let attCalMonth = new Date().getMonth();
 // Status: 'pending' | 'present' | 'noshow' | 'checkout'
 // times[day][time][seatIdx] = { in: 'HH:MM', out: 'HH:MM' }
 let D = { students:[], schedule:{}, status:{}, times:{}, reservations:{}, closedDates:{},
-          dateStatus:{}, dateTimes:{}, dateReservations:{}, resvLog:{} };
+          dateStatus:{}, dateTimes:{}, dateReservations:{}, resvLog:{}, scheduleSnapshots:{} };
 // resvLog['YYYY-MM-DD'] = [{time, studentId, name, seat, action:'resv'|'cancel', at:'HH:MM'}]
 // schedule[day][slot] = 배치 (요일 기반 유지)
 // dateStatus['YYYY-MM-DD'][slot] = []
@@ -992,8 +1010,11 @@ function load() {
       D = remote;
     }
     ensureDefaults();
-    // 로그인 상태면 화면 갱신
-    if(S.role === 'student') renderStudent();
+    // 로그인 상태면 화면 갱신 (선택된 날짜/주 유지)
+    if(S.role === 'student') {
+      // S.day, S.weekOffset 보존한 채로 렌더
+      renderBanner(); renderStatsS(); renderGridS();
+    }
     if(S.role === 'admin') {
       renderStudentList();
       renderAdminSeats();
@@ -1032,6 +1053,7 @@ function ensureDefaults() {
   if(!D.dateTimes) D.dateTimes={};
   if(!D.dateReservations) D.dateReservations={};
   if(!D.resvLog) D.resvLog={};
+  if(!D.scheduleSnapshots) D.scheduleSnapshots={};
   if(!D.location) D.location=null;
   if(D.adminPw) ADMIN_PW=D.adminPw;
   // students: 객체면 배열로 변환
@@ -1055,6 +1077,22 @@ function a(v) { return Array(SEATS).fill(v); }
 // DATE-BASED DATA HELPERS
 // ════════════════════════════════════════
 // 날짜 키로 status/times/reservations 가져오기 (없으면 초기화)
+// 날짜에 맞는 배치 스냅샷 반환 (없으면 기본 schedule 사용)
+function getSchedForDate(dateKey, day, slot) {
+  // scheduleSnapshots: { 'YYYY-MM-DD': { 월:{am:[],pm:[]}, 화:{...}, ... } }
+  // 해당 날짜 이후 가장 가까운 과거 스냅샷 적용
+  const snaps = D.scheduleSnapshots || {};
+  const keys = Object.keys(snaps).sort(); // 날짜순 정렬
+  let best = null;
+  for(const k of keys) {
+    if(k <= dateKey) best = k;
+  }
+  if(best && snaps[best]?.[day]?.[slot]) {
+    return toArr(snaps[best][day][slot], SEATS, null);
+  }
+  return D.schedule[day]?.[slot] || toArr(null, SEATS, null);
+}
+
 function getDateData(dateKey, slot) {
   const _parts = dateKey.split('-').map(Number);
   const _d = new Date(_parts[0], _parts[1]-1, _parts[2]);
@@ -1068,7 +1106,7 @@ function getDateData(dateKey, slot) {
   if(!D.dateTimes[dateKey][slot]) D.dateTimes[dateKey][slot] = toArr(null, SEATS, null);
   if(!D.dateReservations[dateKey][slot]) D.dateReservations[dateKey][slot] = toArr(null, SEATS, null);
   return {
-    sched: D.schedule[day]?.[slot] || toArr(null, SEATS, null),
+    sched: getSchedForDate(dateKey, day, slot),
     stat:  D.dateStatus[dateKey][slot],
     times: D.dateTimes[dateKey][slot],
     resv:  D.dateReservations[dateKey][slot]
@@ -1610,12 +1648,19 @@ function showAdminTab(n) {
 // ── Students tab ──
 function renderStudentList() {
   const list=document.getElementById('student-list');
+  const query=(document.getElementById('student-search')?.value||'').trim().toLowerCase();
   if(!D.students.length){
     list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:14px;">등록된 학생이 없어요</div>';
     return;
   }
+  // 최신 추가 순 (배열 역순), 검색 필터 적용
+  const filtered=[...D.students].reverse().filter(s=>!query||s.name.toLowerCase().includes(query));
+  if(!filtered.length){
+    list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:14px;">검색 결과가 없어요</div>';
+    return;
+  }
   list.innerHTML='';
-  D.students.forEach(s=>{
+  filtered.forEach(s=>{
     const seats=[];
     DAYS.forEach(d=>['am','pm'].forEach(t=>{
       const idx=D.schedule[d][t].indexOf(s.id);
@@ -1729,6 +1774,44 @@ function openAssignModal(day,time,idx) {
   });
   sel.value=D.schedule[day][time][idx]||'';
   openModal('modal-assign');
+}
+
+
+function saveScheduleSnapshot() {
+  const dateInput = document.getElementById('snap-date').value;
+  if(!dateInput){ showToast('날짜를 선택해주세요'); return; }
+  if(!confirm(dateInput + '부터 현재 배치를 적용할까요?')) return;
+  if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
+  // 현재 schedule 전체 복사
+  const copy = {};
+  DAYS.forEach(d => {
+    copy[d] = { am: [...(D.schedule[d]?.am||[])], pm: [...(D.schedule[d]?.pm||[])] };
+  });
+  D.scheduleSnapshots[dateInput] = copy;
+  persist();
+  showToast('✅ ' + dateInput + '부터 적용되는 배치가 저장됐어요');
+  renderSnapList();
+}
+
+function renderSnapList() {
+  const el = document.getElementById('snap-list');
+  if(!el) return;
+  const snaps = D.scheduleSnapshots || {};
+  const keys = Object.keys(snaps).sort().reverse();
+  if(!keys.length){ el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">저장된 배치 변경 없음</div>'; return; }
+  el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">저장된 배치 변경</div>' +
+    keys.map(k => '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.7);border-radius:8px;margin-bottom:4px;">' +
+      '<span style="font-size:12px;font-weight:700;color:var(--body-purple);">' + k + ' 이후</span>' +
+      '<button onclick="deleteSnapshot(\''+k+'\')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;">삭제</button>' +
+    '</div>').join('');
+}
+
+function deleteSnapshot(key) {
+  if(!confirm(key + ' 배치 변경을 삭제할까요?')) return;
+  delete D.scheduleSnapshots[key];
+  persist();
+  showToast('🗑 삭제됐어요');
+  renderSnapList();
 }
 
 function saveAssign() {
@@ -2344,6 +2427,22 @@ function toggleClosed(y,m,d){
   showToast(!cur ? '🔒 '+d+'일 휴무로 변경' : '✅ '+d+'일 운영으로 변경');
 }
 
+
+// 한국 공휴일
+const KR_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-28','2025-01-29','2025-01-30',
+  '2025-03-01','2025-05-05','2025-05-06','2025-06-06',
+  '2025-08-15','2025-10-03','2025-10-05','2025-10-06','2025-10-07','2025-10-08',
+  '2025-11-05','2025-12-25',
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19',
+  '2026-03-01','2026-03-02','2026-05-05','2026-05-25','2026-06-06',
+  '2026-08-17','2026-09-24','2026-09-25','2026-09-26',
+  '2026-10-03','2026-10-05','2026-10-09','2026-12-25'
+]);
+function isHoliday(y, m, d) {
+  return KR_HOLIDAYS.has(y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
+}
+
 function renderCalendar(){
   const now=new Date();
   const todayKey=dateKey(now.getFullYear(),now.getMonth(),now.getDate());
@@ -2379,6 +2478,8 @@ function renderCalendar(){
     if(isPast) cls+=' past';
     if(dow===0) cls+=' sun-col';
     if(dow===6) cls+=' sat-col';
+    if(isHoliday(calYear,calMonth,d)) cls+=' holiday';
+    if(isToday2) cls+=' today-highlight';
     el.className=cls;
     el.textContent=d;
     el.onclick=()=>toggleClosed(calYear,calMonth,d);
