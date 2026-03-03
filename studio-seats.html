@@ -1826,7 +1826,7 @@ function renderGridA() {
     let dispSt,label;
     if(!sid){
       if(resvSid){dispSt='empty';label='예약중';}
-      else{dispSt='empty';label='미배정';}
+      else{dispSt='empty';label='';}
     }
     else if(st==='present'){dispSt='present';label='출석 중';}
     else if(st==='noshow'){dispSt='noshow';label='미사용';}
