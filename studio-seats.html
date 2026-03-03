@@ -1879,25 +1879,19 @@ function renderSeatMonthUI() {
 function saveMonthlySchedule() {
   const dateInput = document.getElementById('seat-apply-date')?.value;
   if(!dateInput){ showToast('적용 시작일을 선택해주세요'); return; }
-  const monthKey = dateInput;
   if(!confirm(dateInput + '부터 현재 배치를 적용할까요?')) return;
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
-  // 스냅샷이 없으면 기본 schedule 복사해서 생성
-  if(!D.scheduleSnapshots[monthKey]) {
-    const copy = {};
-    DAYS.forEach(d => { copy[d] = { am: [...(D.schedule[d]?.am||[])], pm: [...(D.schedule[d]?.pm||[])] }; });
-    D.scheduleSnapshots[monthKey] = copy;
-  }
-  // 이번 달이면 기본 schedule도 스냅샷과 동기화
-  const now = new Date();
-  if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
-    DAYS.forEach(d => {
-      D.schedule[d].am = [...(D.scheduleSnapshots[monthKey][d]?.am||[])];
-      D.schedule[d].pm = [...(D.scheduleSnapshots[monthKey][d]?.pm||[])];
-    });
-  }
+  // 항상 현재 D.schedule을 지정 날짜 스냅샷으로 저장 (덮어쓰기)
+  const copy = {};
+  DAYS.forEach(d => {
+    copy[d] = {
+      am: toArr(D.schedule[d]?.am, SEATS, null),
+      pm: toArr(D.schedule[d]?.pm, SEATS, null)
+    };
+  });
+  D.scheduleSnapshots[dateInput] = copy;
   persist();
-  showToast('✅ ' + (seatEditMonth+1) + '월 배치가 저장됐어요');
+  showToast('✅ ' + dateInput + '부터 적용되는 배치가 저장됐어요');
   renderSeatMonthUI();
   renderSnapList();
 }
