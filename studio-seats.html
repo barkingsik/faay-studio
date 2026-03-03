@@ -1667,7 +1667,7 @@ function showAdminTab(n) {
     document.getElementById(`apanel-${p}`).classList.toggle('active',p===n);
     document.getElementById(`apill-${p}`).classList.toggle('active',p===n);
   });
-  if(n==='seats')renderAdminSeats();
+  if(n==='seats'){ seatEditYear=new Date().getFullYear(); seatEditMonth=new Date().getMonth(); renderAdminSeats(); setTimeout(()=>{renderSeatMonthUI();renderSnapList();},50); }
   if(n==='status'){renderDaysA();renderStatsA();renderGridA();}
   if(n==='students')renderStudentList();
   if(n==='calendar')renderCalendar();
@@ -1934,26 +1934,30 @@ function saveAssign() {
   const selEl = document.getElementById('ma-sel');
   const sid = selEl.value ? selEl.value : null;
 
-  // 항상 D.schedule에 직접 저장 (기본 동작)
+  // D.schedule 직접 저장 (배열 보정 포함)
+  D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
   D.schedule[day][time][idx] = sid;
 
-  // 선택된 월 스냅샷에도 저장
+  // 현재 달 스냅샷도 동기화
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
   if(!D.scheduleSnapshots[monthKey]) {
-    // 기본 schedule 복사해서 스냅샷 생성
     const copy = {};
-    DAYS.forEach(d => { copy[d] = { am: toArr(D.schedule[d]?.am, SEATS, null), pm: toArr(D.schedule[d]?.pm, SEATS, null) }; });
+    DAYS.forEach(d => {
+      copy[d] = {
+        am: toArr(D.schedule[d]?.am, SEATS, null),
+        pm: toArr(D.schedule[d]?.pm, SEATS, null)
+      };
+    });
     D.scheduleSnapshots[monthKey] = copy;
+  } else {
+    if(!D.scheduleSnapshots[monthKey][day])
+      D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
+    ['am','pm'].forEach(t => {
+      D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
+    });
+    D.scheduleSnapshots[monthKey][day][time][idx] = sid;
   }
-  if(!D.scheduleSnapshots[monthKey][day]) {
-    D.scheduleSnapshots[monthKey][day] = { am: toArr(null, SEATS, null), pm: toArr(null, SEATS, null) };
-  }
-  // Firebase 객체→배열 변환 보정
-  ['am','pm'].forEach(t => {
-    D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
-  });
-  D.scheduleSnapshots[monthKey][day][time][idx] = sid;
 
   persist();
   closeModal('modal-assign');
