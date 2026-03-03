@@ -286,6 +286,13 @@
     border-style: solid;
     background: rgba(255,255,255,0.65);
   }
+  .seat-card.admin-empty {
+    border-color: rgba(180,180,200,0.5);
+    border-style: dashed;
+    background: rgba(240,240,248,0.5);
+    opacity: 0.75;
+  }
+  .seat-card.admin-empty .seat-name { color: var(--text3); font-weight: 300; }
   .seat-card.mine {
     border-color: #e8e060;
     border-width: 2px;
@@ -1417,7 +1424,7 @@ function renderGridS() {
         : '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>';
       // 내 예약이면 취소 버튼 (배치 여부와 무관하게 canCancel 기준)
       if(isMyResv && canCancel){
-        const cancellable = canCancelReserv(S.day, S.time, S.weekOffset);
+        const cancellable = i===8 || canCancelReserv(S.day, S.time, S.weekOffset);
         btnHtml = cancellable
           ? '<button class="resv-btn resv-cancel" data-idx="'+i+'">예약 취소</button>'
           : '<button class="resv-btn" style="background:rgba(0,0,0,0.06);border-color:#ccc;color:#aaa;cursor:not-allowed;" disabled>취소 불가</button>';
@@ -1437,7 +1444,7 @@ function renderGridS() {
         dispSt='empty'; label='빈자리';
         if(canCancel){
           if(isMyResv){
-            const cancellable2 = canCancelReserv(S.day, S.time, S.weekOffset);
+            const cancellable2 = i===8 || canCancelReserv(S.day, S.time, S.weekOffset);
             btnHtml = cancellable2
               ? '<button class="resv-btn resv-cancel" data-idx="'+i+'">예약 취소</button>'
               : '<button class="resv-btn" style="background:rgba(0,0,0,0.06);border-color:#ccc;color:#aaa;cursor:not-allowed;" disabled>취소 불가</button>';
@@ -1554,7 +1561,7 @@ function toggleReservation(idx) {
   if(seatSid && seatSt==='present'){ showToast('현재 사용 중인 자리예요'); return; }
 
   if(cur===S.studentId){
-    if(S.role !== 'admin' && !canCancelReserv(S.day, S.time, S.weekOffset)){
+    if(S.role !== 'admin' && idx!==8 && !canCancelReserv(S.day, S.time, S.weekOffset)){
       showToast('⏰ 당일 예약 취소는 불가해요 (전날 자정까지만 가능)');
       return;
     }
@@ -1828,7 +1835,7 @@ function renderGridA() {
     const isAvail=sid&&dispSt!=='present';
     const tRecA=(sid&&D.dateTimes[dk]?.[S.adminTimeA]?.[i])||{};
     const timeStrA=[tRecA.in?'입실 '+tRecA.in:'', tRecA.out?'퇴실 '+tRecA.out:''].filter(Boolean).join(' ');
-    let nameHtml = student?.name||'비어있음';
+    let nameHtml = student?.name||'';
     if(resvStudent && student) nameHtml += ' <span style="font-size:10px;color:#FF28A7;">→ '+resvStudent.name+' 예약</span>';
     if(resvStudent && !student) nameHtml = '<span style="color:#FF28A7;font-weight:700;">'+resvStudent.name+' (예약)</span>';
     const resvBadge = resvSid ? '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>' : '';
