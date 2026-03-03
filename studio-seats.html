@@ -1934,23 +1934,26 @@ function saveAssign() {
   const selEl = document.getElementById('ma-sel');
   const sid = selEl.value ? selEl.value : null;
 
-  // 선택된 월의 스냅샷에 저장 (없으면 기본 schedule에 저장 후 스냅샷도 생성)
+  // 항상 D.schedule에 직접 저장 (기본 동작)
+  D.schedule[day][time][idx] = sid;
+
+  // 선택된 월 스냅샷에도 저장
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
   if(!D.scheduleSnapshots[monthKey]) {
     // 기본 schedule 복사해서 스냅샷 생성
     const copy = {};
-    DAYS.forEach(d => { copy[d] = { am: [...(D.schedule[d]?.am||[])], pm: [...(D.schedule[d]?.pm||[])] }; });
+    DAYS.forEach(d => { copy[d] = { am: toArr(D.schedule[d]?.am, SEATS, null), pm: toArr(D.schedule[d]?.pm, SEATS, null) }; });
     D.scheduleSnapshots[monthKey] = copy;
   }
-  if(!D.scheduleSnapshots[monthKey][day]) D.scheduleSnapshots[monthKey][day]={am:[],pm:[]};
-  D.scheduleSnapshots[monthKey][day][time][idx] = sid;
-
-  // 이번 달이면 기본 schedule도 업데이트
-  const now = new Date();
-  if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
-    D.schedule[day][time][idx] = sid;
+  if(!D.scheduleSnapshots[monthKey][day]) {
+    D.scheduleSnapshots[monthKey][day] = { am: toArr(null, SEATS, null), pm: toArr(null, SEATS, null) };
   }
+  // Firebase 객체→배열 변환 보정
+  ['am','pm'].forEach(t => {
+    D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
+  });
+  D.scheduleSnapshots[monthKey][day][time][idx] = sid;
 
   persist();
   closeModal('modal-assign');
@@ -2012,6 +2015,11 @@ function setTimeA(t) {
 
 function renderStatsA() {
   const dk=adminSelectedDateKey();
+  const adDate=adminDayToDate(S.adminDay,S.adminWeekOffset);
+  if(isClosed(adDate.getFullYear(),adDate.getMonth(),adDate.getDate(),S.adminTimeA)){
+    document.getElementById('stats-a').innerHTML='<div style="color:#e85a5a;font-size:11px;font-weight:700;">🔒 휴무</div>';
+    return;
+  }
   const {sched,stat}=getDateData(dk,S.adminTimeA);
   let present=0,noshow=0,avail=0,unset=0;
   sched.forEach((sid,i)=>{
@@ -2031,6 +2039,17 @@ function renderGridA() {
   const dk=adminSelectedDateKey();
   const {sched,stat,resv}=getDateData(dk,S.adminTimeA);
   const grid=document.getElementById('grid-a'); grid.innerHTML='';
+  // 휴무 체크
+  const adDate=adminDayToDate(S.adminDay,S.adminWeekOffset);
+  const adY=adDate.getFullYear(),adM=adDate.getMonth(),adD=adDate.getDate();
+  const slotClosed=isClosed(adY,adM,adD,S.adminTimeA);
+  if(slotClosed){
+    const slotLabel=S.adminTimeA==='am'?'오전':'오후';
+    const cdVal=D.closedDates[dateToKey(adDate)];
+    const msg=(cdVal==='all'||cdVal===true)?'전체 휴무일이에요':slotLabel+' 휴무일이에요';
+    grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px 20px;color:#e85a5a;font-size:14px;font-weight:700;">🔒 '+msg+'</div>';
+    return;
+  }
   for(let i=0;i<SEATS;i++){
     const sid=sched[i], st=sid?stat[i]:'empty';
     const student=sid?byId(sid):null;
@@ -2155,6 +2174,14 @@ function adminReassign() {
   const newSid=document.getElementById('mst-reassign-sel').value;
   if(!newSid){showToast('학생을 선택해주세요');return;}
   D.schedule[day][time][idx]=newSid;
+  // 현재 달 스냅샷도 동기화
+  const now=new Date();
+  const mk=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+  if(D.scheduleSnapshots?.[mk]) {
+    if(!D.scheduleSnapshots[mk][day]) D.scheduleSnapshots[mk][day]={am:[],pm:[]};
+    while(D.scheduleSnapshots[mk][day][time].length<SEATS) D.scheduleSnapshots[mk][day][time].push(null);
+    D.scheduleSnapshots[mk][day][time][idx]=newSid;
+  }
   // 날짜 기반 상태 초기화
   const adk=adminSelectedDateKey();
   if(D.dateStatus[adk]?.[time]) D.dateStatus[adk][time][idx]='pending';
@@ -2744,9 +2771,9 @@ function renderAttDrilldown() {
 
   // 데이터에서 실제 존재하는 연도/월 수집
   const dataMonths = new Set();
-  // 과거 36개월 범위 제공
   for(let i=0; i<36; i++){
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    if(d.getFullYear() < 2026) continue;
     dataMonths.add(d.getFullYear()+'-'+(String(d.getMonth()+1).padStart(2,'0')));
   }
   const monthList = Array.from(dataMonths).sort().reverse();
