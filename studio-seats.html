@@ -510,6 +510,10 @@
   .cal-day.attcal-sel { border-color: var(--body-purple) !important; background: rgba(90,80,144,0.15) !important; }
   .cal-day.sun-col { color: #e85a5a; }
   .cal-day.sat-col { color: var(--body-purple); }
+  .cal-day.closed-am::after { content: '오전휴'; font-size:7px; }
+  .cal-day.closed-pm::after { content: '오후휴'; font-size:7px; }
+  .cal-day.closed-am { background:rgba(232,160,32,0.1); border-color:#e8a020; color:#e8a020; }
+  .cal-day.closed-pm { background:rgba(232,160,32,0.1); border-color:#e8a020; color:#e8a020; }
   .cal-day.holiday { color: #e85a5a !important; }
   .cal-day.holiday::before {
     content: ''; position:absolute; top:3px; right:3px;
@@ -715,7 +719,7 @@
     <button class="tab-pill active" id="apill-students" onclick="showAdminTab('students')">👥 학생</button>
     <button class="tab-pill" id="apill-seats" onclick="showAdminTab('seats')">🪑 배치</button>
     <button class="tab-pill" id="apill-status" onclick="showAdminTab('status')">📊 현황</button>
-    <button class="tab-pill" id="apill-calendar" onclick="showAdminTab('calendar')">📅 달력</button>
+    <button class="tab-pill" id="apill-calendar" onclick="showAdminTab('calendar')">🚫 휴무설정</button>
     <button class="tab-pill" id="apill-settings" onclick="showAdminTab('settings')">⚙️ 설정</button>
     <button class="tab-pill" id="apill-attcal" onclick="showAdminTab('attcal')">📋 출결달력</button>
   </div>
@@ -886,6 +890,21 @@
     <button class="btn-primary" onclick="saveStudent()">저장</button>
     <button class="btn-danger" id="ms-del-btn" onclick="deleteStudent()" style="display:none">이 학생 삭제</button>
     <button class="btn-ghost" onclick="closeModal('modal-student')">닫기</button>
+  </div>
+</div>
+
+<!-- Closed slot modal -->
+<div class="modal-overlay" id="modal-closed" onclick="closeModal('modal-closed')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="mcd-title"></div>
+    <div class="modal-sub" id="mcd-sub" style="margin-bottom:14px;"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px;">
+      <button class="action-chip" id="mcd-all" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('all')"></button>
+      <button class="action-chip" id="mcd-am" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('am')"></button>
+      <button class="action-chip" id="mcd-pm" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('pm')"></button>
+    </div>
+    <button class="btn-ghost" onclick="closeModal('modal-closed')">닫기</button>
   </div>
 </div>
 
@@ -2492,13 +2511,22 @@ function renderAttCalDetail(y, m, d) {
 // ════════════════════════════════════════
 function dateKey(y,m,d){ return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
 
-function isClosed(y,m,d){
+function isClosed(y,m,d,slot){
   const key=dateKey(y,m,d);
-  if(D.closedDates[key]===false) return false; // 관리자가 명시적으로 열어둔 날
-  if(D.closedDates[key]===true) return true;   // 관리자가 닫은 날
-  // 기본: 토요일만 휴무
+  const val=D.closedDates[key];
+  if(slot==='am'){
+    if(val==='am'||val==='all'||val===true) return true;
+    if(val===false||val==='pm') return false;
+  }
+  if(slot==='pm'){
+    if(val==='pm'||val==='all'||val===true) return true;
+    if(val===false||val==='am') return false;
+  }
+  if(val===false) return false;
+  if(val===true||val==='all') return true;
+  if(val==='am'||val==='pm') return false;
   const dow = new Date(y,m,d).getDay();
-  return dow===6; // 6=토요일
+  return dow===6;
 }
 
 function calMove(dir){
@@ -2508,13 +2536,48 @@ function calMove(dir){
   renderCalendar();
 }
 
+let _cdY,_cdM,_cdD;
 function toggleClosed(y,m,d){
+  _cdY=y; _cdM=m; _cdD=d;
   const key=dateKey(y,m,d);
-  const cur=isClosed(y,m,d);
-  D.closedDates[key]=!cur;
+  const val=D.closedDates[key];
+  const dow=new Date(y,m,d).getDay();
+  const defaultClosed=dow===6;
+  const allClosed=(val===true||val==='all'||(val===undefined&&defaultClosed));
+  const amClosed=(val==='am');
+  const pmClosed=(val==='pm');
+  document.getElementById('mcd-title').textContent=(m+1)+'월 '+d+'일 휴무 설정';
+  document.getElementById('mcd-sub').textContent='설정할 시간대를 선택하세요';
+  const btnAll=document.getElementById('mcd-all');
+  const btnAm=document.getElementById('mcd-am');
+  const btnPm=document.getElementById('mcd-pm');
+  btnAll.textContent=allClosed?'✅ 전체 휴무 (해제하기)':'🚫 전체 휴무 (10-20시)';
+  btnAll.style.cssText='padding:14px;font-size:13px;border-radius:12px;border:1.5px solid '+(allClosed?'#e85a5a':'var(--tag-border)')+';background:'+(allClosed?'rgba(232,90,90,0.12)':'')+';color:'+(allClosed?'#e85a5a':'var(--text)')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;font-weight:700;';
+  btnAm.textContent=amClosed?'✅ 오전 휴무 (해제하기)':'🌅 오전만 휴무 (10-15시)';
+  btnAm.style.cssText='padding:14px;font-size:13px;border-radius:12px;border:1.5px solid '+(amClosed?'#e8a020':'var(--tag-border)')+';background:'+(amClosed?'rgba(232,160,32,0.12)':'')+';color:'+(amClosed?'#e8a020':'var(--text)')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;font-weight:700;';
+  btnPm.textContent=pmClosed?'✅ 오후 휴무 (해제하기)':'🌇 오후만 휴무 (15-20시)';
+  btnPm.style.cssText='padding:14px;font-size:13px;border-radius:12px;border:1.5px solid '+(pmClosed?'#e8a020':'var(--tag-border)')+';background:'+(pmClosed?'rgba(232,160,32,0.12)':'')+';color:'+(pmClosed?'#e8a020':'var(--text)')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;font-weight:700;';
+  openModal('modal-closed');
+}
+
+function setClosedSlot(slot){
+  const key=dateKey(_cdY,_cdM,_cdD);
+  const val=D.closedDates[key];
+  const dow=new Date(_cdY,_cdM,_cdD).getDay();
+  if(slot==='all'){
+    const cur=(val===true||val==='all'||(val===undefined&&dow===6));
+    D.closedDates[key]=cur?false:'all';
+    showToast(cur?'✅ '+_cdD+'일 전체 운영으로 변경':'🔒 '+_cdD+'일 전체 휴무 설정');
+  } else if(slot==='am'){
+    D.closedDates[key]=(val==='am')?false:'am';
+    showToast(val==='am'?'✅ 오전 운영으로 변경':'🔒 오전 휴무 설정');
+  } else {
+    D.closedDates[key]=(val==='pm')?false:'pm';
+    showToast(val==='pm'?'✅ 오후 운영으로 변경':'🔒 오후 휴무 설정');
+  }
   persist();
+  closeModal('modal-closed');
   renderCalendar();
-  showToast(!cur ? '🔒 '+d+'일 휴무로 변경' : '✅ '+d+'일 운영으로 변경');
 }
 
 
@@ -2570,6 +2633,9 @@ function renderCalendar(){
     if(dow===6) cls+=' sat-col';
     if(isHoliday(calYear,calMonth,d)) cls+=' holiday';
     if(isToday2) cls+=' today-highlight';
+    const cdVal=D.closedDates[key];
+    if(cdVal==='am') cls+=' closed-am';
+    else if(cdVal==='pm') cls+=' closed-pm';
     el.className=cls;
     el.textContent=d;
     el.onclick=()=>toggleClosed(calYear,calMonth,d);
