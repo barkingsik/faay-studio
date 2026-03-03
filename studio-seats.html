@@ -840,7 +840,11 @@
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body"></div>
     <div style="padding:12px 20px 20px;">
-      <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 이 월 배치 저장</button>
+      <div style="margin-bottom:8px;">
+        <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 적용 시작일</label>
+        <input type="date" id="seat-apply-date" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+      </div>
+      <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 배치 저장</button>
       <div id="snap-list" style="margin-top:12px;"></div>
     </div>
   </div>
@@ -1836,6 +1840,13 @@ function renderSeatMonthUI() {
   const saveBtn = document.getElementById('seat-save-btn');
   if(!label) return;
   label.textContent = seatEditYear + '년 ' + (seatEditMonth+1) + '월';
+  const applyDateEl = document.getElementById('seat-apply-date');
+  if(applyDateEl) {
+    const fd = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+    const ld = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-'+String(new Date(seatEditYear,seatEditMonth+1,0).getDate()).padStart(2,'0');
+    applyDateEl.min=fd; applyDateEl.max=ld;
+    if(!applyDateEl.value||applyDateEl.value.slice(0,7)!==fd.slice(0,7)) applyDateEl.value=fd;
+  }
 
   // 이 월에 저장된 배치 스냅샷이 있는지 확인
   const snaps = D.scheduleSnapshots || {};
@@ -1849,25 +1860,27 @@ function renderSeatMonthUI() {
   if(snaps[monthKey]) {
     status.innerHTML = '✅ <b>' + (seatEditMonth+1) + '월 배치</b>가 저장되어 있어요. 아래에서 수정 후 다시 저장할 수 있어요.';
     status.style.background = 'rgba(58,122,90,0.1)';
-    saveBtn.textContent = '💾 ' + (seatEditMonth+1) + '월 배치 업데이트';
+    saveBtn.textContent = '💾 배치 업데이트';
   } else if(isCurrent) {
     status.innerHTML = '📋 현재 기본 배치를 표시 중이에요. 수정 후 저장하면 <b>이번 달부터</b> 적용돼요.';
     status.style.background = 'rgba(90,80,144,0.07)';
-    saveBtn.textContent = '💾 ' + (seatEditMonth+1) + '월 배치 저장';
+    saveBtn.textContent = '💾 배치 저장';
   } else if(isPast) {
     status.innerHTML = '📁 지난 달이에요. 수정해도 과거 기록에만 영향을 줘요.';
     status.style.background = 'rgba(180,180,180,0.1)';
-    saveBtn.textContent = '💾 ' + (seatEditMonth+1) + '월 배치 저장';
+    saveBtn.textContent = '💾 배치 저장';
   } else {
     status.innerHTML = '📅 <b>' + (seatEditMonth+1) + '월</b> 배치를 미리 설정할 수 있어요. 저장하면 해당 월 1일부터 적용돼요.';
     status.style.background = 'rgba(90,80,144,0.07)';
-    saveBtn.textContent = '💾 ' + (seatEditMonth+1) + '월 배치 저장';
+    saveBtn.textContent = '💾 배치 저장';
   }
 }
 
 function saveMonthlySchedule() {
-  const monthKey = seatEditYear + '-' + String(seatEditMonth+1).padStart(2,'0') + '-01';
-  if(!confirm((seatEditMonth+1) + '월 1일부터 현재 배치를 적용할까요?')) return;
+  const dateInput = document.getElementById('seat-apply-date')?.value;
+  if(!dateInput){ showToast('적용 시작일을 선택해주세요'); return; }
+  const monthKey = dateInput;
+  if(!confirm(dateInput + '부터 현재 배치를 적용할까요?')) return;
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
   // 스냅샷이 없으면 기본 schedule 복사해서 생성
   if(!D.scheduleSnapshots[monthKey]) {
