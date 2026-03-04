@@ -840,9 +840,15 @@
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body"></div>
     <div style="padding:12px 20px 20px;">
-      <div style="margin-bottom:8px;">
-        <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 적용 시작일</label>
-        <input type="date" id="seat-apply-date" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+        <div>
+          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 적용 시작일</label>
+          <input type="date" id="seat-apply-date" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 적용 마지막일 <span style="font-weight:400;color:var(--text3);">(미설정 시 다음 배치 전까지)</span></label>
+          <input type="date" id="seat-apply-end" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+        </div>
       </div>
       <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 배치 저장</button>
       <div id="snap-list" style="margin-top:12px;"></div>
@@ -1117,13 +1123,16 @@ function a(v) { return Array(SEATS).fill(v); }
 // 날짜 키로 status/times/reservations 가져오기 (없으면 초기화)
 // 날짜에 맞는 배치 스냅샷 반환 (없으면 기본 schedule 사용)
 function getSchedForDate(dateKey, day, slot) {
-  // scheduleSnapshots: { 'YYYY-MM-DD': { 월:{am:[],pm:[]}, 화:{...}, ... } }
-  // 해당 날짜 이후 가장 가까운 과거 스냅샷 적용
+  // scheduleSnapshots: { 'YYYY-MM-DD': { _end?:'YYYY-MM-DD', 월:{am:[],pm:[]}, ... } }
+  // 해당 날짜에 적용되는 스냅샷: start <= dateKey && (no _end || _end >= dateKey)
   const snaps = D.scheduleSnapshots || {};
-  const keys = Object.keys(snaps).sort(); // 날짜순 정렬
+  const keys = Object.keys(snaps).filter(k=>!k.startsWith('_')).sort();
   let best = null;
   for(const k of keys) {
-    if(k <= dateKey) best = k;
+    if(k <= dateKey) {
+      const endDate = snaps[k]?._end;
+      if(!endDate || endDate >= dateKey) best = k;
+    }
   }
   if(best && snaps[best]?.[day]?.[slot]) {
     return toArr(snaps[best][day][slot], SEATS, null);
@@ -1851,6 +1860,8 @@ function renderSeatMonthUI() {
     const ld = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-'+String(new Date(seatEditYear,seatEditMonth+1,0).getDate()).padStart(2,'0');
     applyDateEl.min=fd; applyDateEl.max=ld;
     if(!applyDateEl.value||applyDateEl.value.slice(0,7)!==fd.slice(0,7)) applyDateEl.value=fd;
+    const endEl=document.getElementById('seat-apply-end');
+    if(endEl){endEl.min=fd; endEl.max=ld; endEl.value='';}
   }
 
   // 이 월에 저장된 배치 스냅샷이 있는지 확인
@@ -1882,20 +1893,25 @@ function renderSeatMonthUI() {
 }
 
 function saveMonthlySchedule() {
-  const dateInput = document.getElementById('seat-apply-date')?.value;
-  if(!dateInput){ showToast('적용 시작일을 선택해주세요'); return; }
+  const startDate = document.getElementById('seat-apply-date')?.value;
+  const endDate = document.getElementById('seat-apply-end')?.value || null;
+  if(!startDate){ showToast('적용 시작일을 선택해주세요'); return; }
+  if(endDate && endDate < startDate){ showToast('마지막일은 시작일 이후여야 해요'); return; }
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
-  // 항상 현재 D.schedule을 지정 날짜 스냅샷으로 저장 (덮어쓰기)
+  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+  const snap = D.scheduleSnapshots?.[monthKey];
   const copy = {};
   DAYS.forEach(d => {
     copy[d] = {
-      am: toArr(D.schedule[d]?.am, SEATS, null),
-      pm: toArr(D.schedule[d]?.pm, SEATS, null)
+      am: snap ? toArr(snap[d]?.am, SEATS, null) : getSchedForDate(monthKey, d, 'am'),
+      pm: snap ? toArr(snap[d]?.pm, SEATS, null) : getSchedForDate(monthKey, d, 'pm')
     };
   });
-  D.scheduleSnapshots[dateInput] = copy;
+  copy._end = endDate;
+  D.scheduleSnapshots[startDate] = copy;
   persist();
-  showToast('✅ ' + dateInput + '부터 적용되는 배치가 저장됐어요');
+  const msg = endDate ? startDate + ' ~ ' + endDate : startDate + ' 이후';
+  showToast('✅ ' + msg + ' 배치가 저장됐어요');
   renderSeatMonthUI();
   renderSnapList();
 }
@@ -1934,7 +1950,8 @@ function renderSnapList() {
     row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.7);border-radius:8px;margin-bottom:4px;';
     const span = document.createElement('span');
     span.style.cssText='font-size:12px;font-weight:700;color:var(--body-purple);';
-    span.textContent=k+' 이후';
+    const endD = D.scheduleSnapshots[k]?._end;
+    span.textContent = endD ? k + ' ~ ' + endD : k + ' 이후';
     const btn = document.createElement('button');
     btn.style.cssText='font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;';
     btn.textContent='삭제';
