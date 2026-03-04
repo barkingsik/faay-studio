@@ -972,6 +972,10 @@
     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">출결 상태</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
       <button class="action-chip chip-checkin" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminStatus('present')">✅ 입실 처리 (현재 시각 기록)</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:-4px;">
+        <input type="time" id="mst-checkin-time" style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);">
+        <button class="action-chip chip-checkin" style="padding:9px 14px;font-size:12px;border-radius:10px;white-space:nowrap;" onclick="adminCheckinManual()">시각 지정 입실</button>
+      </div>
       <div id="mst-checkout-wrap" style="display:none;flex-direction:column;gap:6px;">
         <button class="action-chip chip-checkout" style="padding:14px;font-size:14px;border-radius:12px;" onclick="adminCheckout()">🚪 퇴실 처리 (현재 시각 기록)</button>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -2440,6 +2444,13 @@ function openStatusModal(day,time,idx) {
   document.getElementById('mst-title').textContent=(s?.name||'빈자리')+' · '+slabel(idx);
   document.getElementById('mst-sub').textContent=day+'요일 '+(time==='am'?'오전':'오후')+(sid?' · 현재: '+(stLabels[st]||st):'');
 
+  // 퇴실 버튼: 출석 중일 때만 표시
+  const checkoutWrap=document.getElementById('mst-checkout-wrap');
+  checkoutWrap.style.display=(st==='present')?'flex':'none';
+  // 현재 시각을 time input 기본값으로
+  document.getElementById('mst-checkout-time').value=nowHM();
+  document.getElementById('mst-checkin-time').value=nowHM();
+
   // 예약 현황 표시
   const resvCurrent=document.getElementById('mst-resv-current');
   const resvBtn=document.getElementById('mst-resv-cancel-btn');
@@ -2552,6 +2563,43 @@ function adminStatus(newSt) {
   if(newSt==='noshow') D.dateTimes[adk][time][idx]=null;
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('✅ 상태가 변경됐어요');
+}
+
+function adminCheckout() {
+  const {day,time,idx}=S.statusTarget;
+  const adk=adminSelectedDateKey();
+  const dd=getDateData(adk,time);
+  dd.stat[idx]='checkout';
+  if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
+  D.dateTimes[adk][time][idx].out=nowHM();
+  persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
+  showToast('🚪 퇴실 처리됐어요');
+}
+
+function adminCheckoutManual() {
+  const {day,time,idx}=S.statusTarget;
+  const adk=adminSelectedDateKey();
+  const t=document.getElementById('mst-checkout-time').value;
+  if(!t){ showToast('퇴실 시각을 선택해주세요'); return; }
+  const dd=getDateData(adk,time);
+  dd.stat[idx]='checkout';
+  if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
+  D.dateTimes[adk][time][idx].out=t;
+  persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
+  showToast('🚪 '+t+' 퇴실 처리됐어요');
+}
+
+function adminCheckinManual() {
+  const {day,time,idx}=S.statusTarget;
+  const adk=adminSelectedDateKey();
+  const t=document.getElementById('mst-checkin-time').value;
+  if(!t){ showToast('입실 시각을 선택해주세요'); return; }
+  const dd=getDateData(adk,time);
+  dd.stat[idx]='present';
+  if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
+  D.dateTimes[adk][time][idx].in=t;
+  persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
+  showToast('✅ '+t+' 입실 처리됐어요');
 }
 
 
