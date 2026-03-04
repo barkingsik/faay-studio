@@ -2043,21 +2043,23 @@ function renderAdminSeats() {
 }
 
 function openAssignModal(day,time,idx) {
-  if(previewSnapKey){ showToast('👁 미리보기 중에는 수정할 수 없어요'); return; }
   S.assignTarget={day,time,idx};
   document.getElementById('ma-title').textContent=slabel(idx);
-  // 월 표시 추가
-  document.getElementById('ma-sub').textContent=`${seatEditYear}년 ${seatEditMonth+1}월 · ${day}요일 ${time==='am'?'오전':'오후'}`;
+  const now=new Date();
+  const snapKey = previewSnapKey || (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01');
+  const endD = previewSnapKey ? (D.scheduleSnapshots?.[previewSnapKey]?._end || null) : null;
+  const rangeLabel = previewSnapKey
+    ? (endD ? previewSnapKey+' ~ '+endD : previewSnapKey+' 이후')
+    : (now.getFullYear()+'년 '+(now.getMonth()+1)+'월');
+  document.getElementById('ma-sub').textContent=`${rangeLabel} · ${day}요일 ${time==='am'?'오전':'오후'}`;
   const sel=document.getElementById('ma-sel');
   sel.innerHTML='<option value="">— 배정 없음 —</option>';
   D.students.forEach(s=>{
     const o=document.createElement('option');
     o.value=s.id; o.textContent=`${s.name} (${s.phone})`; sel.appendChild(o);
   });
-  // 현재 편집 중인 월의 스냅샷에서 값 읽기
-  const _now2=new Date(); const monthKey = _now2.getFullYear()+'-'+String(_now2.getMonth()+1).padStart(2,'0')+'-01';
-  const snap = D.scheduleSnapshots?.[monthKey];
-  const _arr = snap ? toArr(snap[day]?.[time], SEATS, null) : getSchedForDate(monthKey, day, time);
+  const snap = D.scheduleSnapshots?.[snapKey];
+  const _arr = snap ? toArr(snap[day]?.[time], SEATS, null) : getSchedForDate(snapKey, day, time);
   const curSid = _arr[idx] || '';
   sel.value = curSid;
   openModal('modal-assign');
@@ -2077,12 +2079,27 @@ function renderSeatMonthUI() {
   const saveBtn = document.getElementById('seat-save-btn');
   const saveArea = document.getElementById('seat-save-area');
 
-  // 미리보기 모드면 저장 영역 숨기기
   if(previewSnapKey) {
-    if(saveArea) saveArea.style.display='none';
+    // 미리보기 중: 저장 버튼은 보이되 날짜 입력 잠금
+    if(saveArea) saveArea.style.display='';
+    if(saveBtn) saveBtn.textContent = '💾 이 배치 저장';
+    // 날짜 입력란에 해당 스냅샷 날짜 표시 (잠금)
+    const endD = D.scheduleSnapshots?.[previewSnapKey]?._end || '';
+    const startLabel = document.getElementById('seat-date-label');
+    const endLabel = document.getElementById('seat-end-label');
+    if(startLabel) startLabel.textContent = previewSnapKey;
+    if(endLabel) endLabel.textContent = endD || '선택 안함';
+    const startInput = document.getElementById('seat-apply-date');
+    const endInput = document.getElementById('seat-apply-end');
+    if(startInput){ startInput.value = previewSnapKey; startInput.style.pointerEvents='none'; }
+    if(endInput){ endInput.value = endD; endInput.style.pointerEvents='none'; }
   } else {
     if(saveArea) saveArea.style.display='';
     if(saveBtn) saveBtn.textContent = '💾 저장';
+    const startInput = document.getElementById('seat-apply-date');
+    const endInput = document.getElementById('seat-apply-end');
+    if(startInput) startInput.style.pointerEvents='';
+    if(endInput) endInput.style.pointerEvents='';
   }
 }
 
@@ -2092,20 +2109,30 @@ function saveMonthlySchedule() {
   if(!startDate){ showToast('적용 시작일을 선택해주세요'); return; }
   if(endDate && endDate < startDate){ showToast('마지막일은 시작일 이후여야 해요'); return; }
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
+
+  // 미리보기 중이면 해당 스냅샷 기준, 아니면 이번 달 스냅샷 기준
   const _now2=new Date(); const monthKey = _now2.getFullYear()+'-'+String(_now2.getMonth()+1).padStart(2,'0')+'-01';
-  const snap = D.scheduleSnapshots?.[monthKey];
+  const sourceKey = previewSnapKey || monthKey;
+  const snap = D.scheduleSnapshots?.[sourceKey];
   const copy = {};
   DAYS.forEach(d => {
     copy[d] = {
-      am: snap ? toArr(snap[d]?.am, SEATS, null) : getSchedForDate(monthKey, d, 'am'),
-      pm: snap ? toArr(snap[d]?.pm, SEATS, null) : getSchedForDate(monthKey, d, 'pm')
+      am: snap ? toArr(snap[d]?.am, SEATS, null) : getSchedForDate(sourceKey, d, 'am'),
+      pm: snap ? toArr(snap[d]?.pm, SEATS, null) : getSchedForDate(sourceKey, d, 'pm')
     };
   });
   copy._end = endDate;
+
+  // 미리보기 중 키가 변경되면 기존 키 삭제 후 새 키로 저장
+  if(previewSnapKey && previewSnapKey !== startDate) {
+    delete D.scheduleSnapshots[previewSnapKey];
+    previewSnapKey = startDate;
+  }
   D.scheduleSnapshots[startDate] = copy;
   persist();
   const msg = endDate ? startDate + ' ~ ' + endDate : startDate + ' 이후';
   showToast('✅ ' + msg + ' 배치가 저장됐어요');
+  renderAdminSeats();
   renderSeatMonthUI();
   renderSnapList();
 }
@@ -2224,32 +2251,33 @@ function saveAssign() {
     const selEl = document.getElementById('ma-sel');
     const sid = selEl.value ? selEl.value : null;
 
-    const _now=new Date(); const monthKey = _now.getFullYear()+'-'+String(_now.getMonth()+1).padStart(2,'0')+'-01';
+    const _now=new Date();
+    const monthKey = _now.getFullYear()+'-'+String(_now.getMonth()+1).padStart(2,'0')+'-01';
+    const targetKey = previewSnapKey || monthKey;
     if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
 
-    // 해당 월 스냅샷 없으면 현재 적용 배치 기반으로 생성 (SEATS=9 크기 보장)
-    if(!D.scheduleSnapshots[monthKey]) {
+    // 해당 스냅샷 없으면 현재 적용 배치 기반으로 생성 (SEATS=9 크기 보장)
+    if(!D.scheduleSnapshots[targetKey]) {
       const copy = {};
       DAYS.forEach(d => {
         copy[d] = {
-          am: [...getSchedForDate(monthKey, d, 'am')],
-          pm: [...getSchedForDate(monthKey, d, 'pm')]
+          am: [...getSchedForDate(targetKey, d, 'am')],
+          pm: [...getSchedForDate(targetKey, d, 'pm')]
         };
       });
-      D.scheduleSnapshots[monthKey] = copy;
+      D.scheduleSnapshots[targetKey] = copy;
     }
 
     // 해당 요일 배열 보장 (크기 SEATS=9)
-    if(!D.scheduleSnapshots[monthKey][day])
-      D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
+    if(!D.scheduleSnapshots[targetKey][day])
+      D.scheduleSnapshots[targetKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
     ['am','pm'].forEach(t => {
-      D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
+      D.scheduleSnapshots[targetKey][day][t] = toArr(D.scheduleSnapshots[targetKey][day][t], SEATS, null);
     });
-    D.scheduleSnapshots[monthKey][day][time][idx] = sid;
+    D.scheduleSnapshots[targetKey][day][time][idx] = sid;
 
-    // D.schedule 동기화 (현재 달이면) - 안전하게
-    const now = new Date();
-    if(true) { // 항상 D.schedule 동기화
+    // D.schedule도 동기화 (현재 월 스냅샷 수정 시)
+    if(!previewSnapKey) {
       if(!D.schedule[day]) D.schedule[day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
       if(!D.schedule[day][time]) D.schedule[day][time] = toArr(null,SEATS,null);
       D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
