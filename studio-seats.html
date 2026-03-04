@@ -840,17 +840,17 @@
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body" style="max-height:52vh;overflow-y:auto;"></div>
     <div style="padding:12px 20px 20px;">
-      <div style="display:flex;gap:12px;margin-bottom:8px;justify-content:center;">
-        <div style="text-align:center;">
+      <div style="display:flex;gap:12px;margin-bottom:8px;">
+        <div style="flex:1;text-align:center;min-width:0;">
           <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 시작일</label>
-          <input type="date" id="seat-apply-date" style="padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;width:130px;">
+          <input type="date" id="seat-apply-date" style="width:100%;padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
         </div>
-        <div style="text-align:center;">
+        <div style="flex:1;text-align:center;min-width:0;">
           <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 마지막일</label>
-          <input type="date" id="seat-apply-end" style="padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;width:130px;">
+          <input type="date" id="seat-apply-end" style="width:100%;padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
         </div>
       </div>
-      <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 배치 저장</button>
+      <button onclick="saveMonthlySchedule()" id="seat-save-btn" style="padding:10px 20px;border-radius:12px;border:1.5px solid var(--body-purple);background:rgba(90,80,144,0.12);color:var(--body-purple);font-size:13px;font-weight:700;cursor:pointer;font-family:Noto Sans KR,sans-serif;margin-bottom:8px;">💾 배치 저장</button>
       <div id="snap-list" style="margin-top:12px;"></div>
     </div>
   </div>
