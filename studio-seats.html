@@ -1781,10 +1781,14 @@ function setAdminTime(t) {
 
 function renderAdminSeats() {
   const t=S.adminTime;
-  // 선택된 월의 스냅샷이 있으면 그걸 편집, 없으면 기본 schedule
+  // 선택된 월의 배치: 스냅샷이 있으면 그걸, 없으면 해당 월 1일 기준 최신 스냅샷
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
   const snap = D.scheduleSnapshots?.[monthKey];
-  const editSched = snap || D.schedule;
+  // editSched: day -> {am, pm} 형태로 접근 가능하도록
+  const getEditSched = (day, slot) => {
+    if(snap) return toArr(snap[day]?.[slot], SEATS, null);
+    return getSchedForDate(monthKey, day, slot);
+  };
 
   document.getElementById('a-grid-hdr').innerHTML='<span>좌석</span>'+DAYS.map(d=>`<span>${d}</span>`).join('');
   const body=document.getElementById('a-grid-body'); body.innerHTML='';
@@ -1794,7 +1798,7 @@ function renderAdminSeats() {
     lbl.textContent=i===8?'보조':`S${String(i+1).padStart(2,'0')}`; row.appendChild(lbl);
     DAYS.forEach(d=>{
       const cell=document.createElement('div');
-      const sid=editSched[d]?.[t]?.[i], student=sid?byId(sid):null;
+      const _row=getEditSched(d,t); const sid=_row[i]||null, student=sid?byId(sid):null;
       cell.className='admin-cell'+(student?' has-s':'');
       cell.innerHTML=student?`<div class="cell-name">${student.name}</div>`:`<div class="cell-name" style="color:var(--text3);font-size:12px;">+</div>`;
       cell.dataset.day=d; cell.dataset.time=t; cell.dataset.idx=i;
@@ -1819,7 +1823,8 @@ function openAssignModal(day,time,idx) {
   // 현재 편집 중인 월의 스냅샷에서 값 읽기
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
   const snap = D.scheduleSnapshots?.[monthKey];
-  const curSid = snap ? (snap[day]?.[time]?.[idx] || '') : (D.schedule[day]?.[time]?.[idx] || '');
+  const _arr = snap ? toArr(snap[day]?.[time], SEATS, null) : getSchedForDate(monthKey, day, time);
+  const curSid = _arr[idx] || '';
   sel.value = curSid;
   openModal('modal-assign');
 }
@@ -1879,7 +1884,6 @@ function renderSeatMonthUI() {
 function saveMonthlySchedule() {
   const dateInput = document.getElementById('seat-apply-date')?.value;
   if(!dateInput){ showToast('적용 시작일을 선택해주세요'); return; }
-  if(!confirm(dateInput + '부터 현재 배치를 적용할까요?')) return;
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
   // 항상 현재 D.schedule을 지정 날짜 스냅샷으로 저장 (덮어쓰기)
   const copy = {};
@@ -1899,7 +1903,6 @@ function saveMonthlySchedule() {
 function saveScheduleSnapshot() {
   const dateInput = document.getElementById('snap-date').value;
   if(!dateInput){ showToast('날짜를 선택해주세요'); return; }
-  if(!confirm(dateInput + '부터 현재 배치를 적용할까요?')) return;
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
   // 현재 schedule 전체 복사
   const copy = {};
@@ -1917,16 +1920,32 @@ function renderSnapList() {
   if(!el) return;
   const snaps = D.scheduleSnapshots || {};
   const keys = Object.keys(snaps).sort().reverse();
-  if(!keys.length){ el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">저장된 배치 변경 없음</div>'; return; }
-  el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">저장된 배치 변경</div>' +
-    keys.map(k => '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.7);border-radius:8px;margin-bottom:4px;">' +
-      '<span style="font-size:12px;font-weight:700;color:var(--body-purple);">' + k + ' 이후</span>' +
-      '<button onclick="deleteSnapshot(\''+k+'\')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;">삭제</button>' +
-    '</div>').join('');
+  el.innerHTML = '';
+  if(!keys.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">저장된 배치 변경 없음</div>';
+    return;
+  }
+  const title = document.createElement('div');
+  title.style.cssText='font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;';
+  title.textContent='저장된 배치 변경';
+  el.appendChild(title);
+  keys.forEach(k => {
+    const row = document.createElement('div');
+    row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.7);border-radius:8px;margin-bottom:4px;';
+    const span = document.createElement('span');
+    span.style.cssText='font-size:12px;font-weight:700;color:var(--body-purple);';
+    span.textContent=k+' 이후';
+    const btn = document.createElement('button');
+    btn.style.cssText='font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;';
+    btn.textContent='삭제';
+    btn.addEventListener('click', () => deleteSnapshot(k));
+    row.appendChild(span);
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
 }
 
 function deleteSnapshot(key) {
-  if(!confirm(key + ' 배치 변경을 삭제할까요?')) return;
   delete D.scheduleSnapshots[key];
   persist();
   showToast('🗑 삭제됐어요');
@@ -1941,30 +1960,29 @@ function saveAssign() {
   const selEl = document.getElementById('ma-sel');
   const sid = selEl.value ? selEl.value : null;
 
-  // D.schedule 직접 저장 (배열 보정 포함)
-  D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
-  D.schedule[day][time][idx] = sid;
-
-  // 현재 달 스냅샷도 동기화
+  // 스냅샷 기반으로만 저장 (D.schedule 직접 수정 안 함)
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
+
+  // 해당 월 스냅샷이 없으면 현재 가장 최신 스냅샷(또는 D.schedule)을 복사해서 생성
   if(!D.scheduleSnapshots[monthKey]) {
     const copy = {};
     DAYS.forEach(d => {
-      copy[d] = {
-        am: toArr(D.schedule[d]?.am, SEATS, null),
-        pm: toArr(D.schedule[d]?.pm, SEATS, null)
-      };
+      // getSchedForDate 방식으로 해당 월 기준 배치 가져오기
+      const amArr = getSchedForDate(monthKey, d, 'am');
+      const pmArr = getSchedForDate(monthKey, d, 'pm');
+      copy[d] = { am: [...amArr], pm: [...pmArr] };
     });
     D.scheduleSnapshots[monthKey] = copy;
-  } else {
-    if(!D.scheduleSnapshots[monthKey][day])
-      D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
-    ['am','pm'].forEach(t => {
-      D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
-    });
-    D.scheduleSnapshots[monthKey][day][time][idx] = sid;
   }
+
+  // 해당 칸만 수정
+  if(!D.scheduleSnapshots[monthKey][day])
+    D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
+  ['am','pm'].forEach(t => {
+    D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
+  });
+  D.scheduleSnapshots[monthKey][day][time][idx] = sid;
 
   persist();
   closeModal('modal-assign');
@@ -1973,6 +1991,7 @@ function saveAssign() {
   const s = sid ? byId(sid) : null;
   showToast(s ? '✅ ' + s.name + ' 배정 완료' : '✅ 배정이 제거됐어요');
 }
+
 
 // ── Status tab ──
 function adminWeekMove(dir) {
