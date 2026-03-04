@@ -1046,6 +1046,7 @@ let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let seatEditYear = new Date().getFullYear();
 let seatEditMonth = new Date().getMonth();
+let previewSnapKey = null; // 미리보기 중인 스냅샷 키 (null이면 현재 월 기본)
 let attCalYear = new Date().getFullYear();
 let attCalMonth = new Date().getMonth();
 
@@ -1150,6 +1151,18 @@ function ensureDefaults() {
   if(!D.dateReservations) D.dateReservations={};
   if(!D.resvLog) D.resvLog={};
   if(!D.scheduleSnapshots) D.scheduleSnapshots={};
+  // 스냅샷 배열도 SEATS 크기 보장 (보조좌석 index 8 포함)
+  Object.keys(D.scheduleSnapshots).forEach(snapKey => {
+    const snap = D.scheduleSnapshots[snapKey];
+    if(!snap || typeof snap !== 'object') return;
+    DAYS.forEach(d => {
+      if(snap[d]) {
+        ['am','pm'].forEach(t => {
+          if(snap[d][t]) snap[d][t] = toArr(snap[d][t], SEATS, null);
+        });
+      }
+    });
+  });
   if(!D.location) D.location=null;
   if(D.adminPw) ADMIN_PW=D.adminPw;
   // students: 객체면 배열로 변환
@@ -1893,7 +1906,7 @@ function showAdminTab(n) {
     document.getElementById(`apanel-${p}`).classList.toggle('active',p===n);
     document.getElementById(`apill-${p}`).classList.toggle('active',p===n);
   });
-  if(n==='seats'){ seatEditYear=new Date().getFullYear(); seatEditMonth=new Date().getMonth(); renderAdminSeats(); setTimeout(()=>{renderSeatMonthUI();renderSnapList();},50); }
+  if(n==='seats'){ previewSnapKey=null; seatEditYear=new Date().getFullYear(); seatEditMonth=new Date().getMonth(); renderAdminSeats(); setTimeout(()=>{renderSeatMonthUI();renderSnapList();},50); }
   if(n==='status'){renderDaysA();renderStatsA();renderGridA();}
   if(n==='students')renderStudentList();
   if(n==='calendar')renderCalendar();
@@ -2005,11 +2018,12 @@ function renderAdminSeats() {
   const t=S.adminTime;
   // 선택된 월의 배치: 스냅샷이 있으면 그걸, 없으면 해당 월 1일 기준 최신 스냅샷
   const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
-  const snap = D.scheduleSnapshots?.[monthKey];
+  const lookupKey = previewSnapKey || monthKey;
+  const snap = D.scheduleSnapshots?.[lookupKey];
   // editSched: day -> {am, pm} 형태로 접근 가능하도록
   const getEditSched = (day, slot) => {
     if(snap) return toArr(snap[day]?.[slot], SEATS, null);
-    return getSchedForDate(monthKey, day, slot);
+    return getSchedForDate(lookupKey, day, slot);
   };
 
   document.getElementById('a-grid-hdr').innerHTML='<span>좌석</span>'+DAYS.map(d=>`<span>${d}</span>`).join('');
@@ -2032,6 +2046,7 @@ function renderAdminSeats() {
 }
 
 function openAssignModal(day,time,idx) {
+  if(previewSnapKey){ showToast('👁 미리보기 중에는 수정할 수 없어요'); return; }
   S.assignTarget={day,time,idx};
   document.getElementById('ma-title').textContent=slabel(idx);
   // 월 표시 추가
@@ -2103,6 +2118,22 @@ function renderSeatMonthUI() {
     status.style.background = 'rgba(90,80,144,0.07)';
     saveBtn.textContent = '💾 배치 저장';
   }
+
+  // 미리보기 모드 오버라이드
+  if(previewSnapKey) {
+    const endD = snaps[previewSnapKey]?._end;
+    const snapLabel = endD ? previewSnapKey + ' ~ ' + endD : previewSnapKey + ' 이후';
+    status.innerHTML = '👁 <b>미리보기:</b> ' + snapLabel + ' — 이 배치는 수정할 수 없어요.';
+    status.style.background = 'rgba(90,80,144,0.12)';
+    status.style.border = '1.5px dashed var(--body-purple)';
+    // 저장 버튼·날짜 입력 숨기기
+    const saveBtnRow = saveBtn?.parentElement;
+    if(saveBtnRow) saveBtnRow.style.display='none';
+  } else {
+    status.style.border = '';
+    const saveBtnRow = saveBtn?.parentElement;
+    if(saveBtnRow) saveBtnRow.style.display='';
+  }
 }
 
 function saveMonthlySchedule() {
@@ -2148,7 +2179,7 @@ function renderSnapList() {
   const el = document.getElementById('snap-list');
   if(!el) return;
   const snaps = D.scheduleSnapshots || {};
-  const keys = Object.keys(snaps).sort().reverse();
+  const keys = Object.keys(snaps).filter(k=>!k.startsWith('_')).sort().reverse();
   el.innerHTML = '';
   if(!keys.length){
     el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">저장된 배치 변경 없음</div>';
@@ -2159,20 +2190,72 @@ function renderSnapList() {
   title.textContent='저장된 배치 변경';
   el.appendChild(title);
   keys.forEach(k => {
+    const isPreview = previewSnapKey === k;
+    const endD = snaps[k]?._end;
+    const label = endD ? k + ' ~ ' + endD : k + ' 이후';
+
     const row = document.createElement('div');
-    row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(255,255,255,0.7);border-radius:8px;margin-bottom:4px;';
+    row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:background 0.15s;'
+      +(isPreview ? 'background:rgba(90,80,144,0.15);border:1.5px solid var(--body-purple);' : 'background:rgba(255,255,255,0.7);border:1.5px solid transparent;');
+
+    const left = document.createElement('div');
+    left.style.cssText='display:flex;align-items:center;gap:6px;flex:1;min-width:0;';
+
+    const dot = document.createElement('span');
+    dot.textContent = isPreview ? '👁' : '📋';
+    dot.style.cssText='font-size:12px;flex-shrink:0;';
+
     const span = document.createElement('span');
-    span.style.cssText='font-size:12px;font-weight:700;color:var(--body-purple);';
-    const endD = D.scheduleSnapshots[k]?._end;
-    span.textContent = endD ? k + ' ~ ' + endD : k + ' 이후';
-    const btn = document.createElement('button');
-    btn.style.cssText='font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;';
-    btn.textContent='삭제';
-    btn.addEventListener('click', () => deleteSnapshot(k));
-    row.appendChild(span);
-    row.appendChild(btn);
+    span.style.cssText='font-size:12px;font-weight:700;color:'+(isPreview?'var(--body-purple)':'var(--text)')+';';
+    span.textContent = label;
+
+    left.appendChild(dot);
+    left.appendChild(span);
+
+    const btnWrap = document.createElement('div');
+    btnWrap.style.cssText='display:flex;gap:5px;flex-shrink:0;';
+
+    if(isPreview){
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent='닫기';
+      cancelBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--body-purple);background:var(--body-purple);color:#fff;cursor:pointer;';
+      cancelBtn.addEventListener('click', (e)=>{ e.stopPropagation(); previewSnapKey=null; renderAdminSeats(); renderSeatMonthUI(); renderSnapList(); });
+      btnWrap.appendChild(cancelBtn);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.textContent='삭제';
+    delBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid var(--title-red);background:none;color:var(--title-red);cursor:pointer;';
+    delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteSnapshot(k); });
+    btnWrap.appendChild(delBtn);
+
+    row.appendChild(left);
+    row.appendChild(btnWrap);
+
+    // 행 클릭 시 해당 스냅샷 미리보기
+    row.addEventListener('click', ()=>{
+      previewSnapKey = isPreview ? null : k;
+      renderAdminSeats();
+      renderSeatMonthUI();
+      renderSnapList();
+      // 그리드 맨 위로 스크롤
+      document.getElementById('a-grid-body')?.scrollTo({top:0});
+    });
+
     el.appendChild(row);
   });
+
+  // 미리보기 중 안내 배너
+  if(previewSnapKey){
+    const banner = document.createElement('div');
+    const snapLabel = (()=>{
+      const endD=snaps[previewSnapKey]?._end;
+      return endD ? previewSnapKey+' ~ '+endD : previewSnapKey+' 이후';
+    })();
+    banner.style.cssText='margin-top:4px;padding:7px 10px;border-radius:8px;background:rgba(90,80,144,0.1);border:1px dashed var(--body-purple);font-size:11px;color:var(--body-purple);text-align:center;';
+    banner.textContent='👁 미리보기 중: '+snapLabel+' — 수정 불가';
+    el.appendChild(banner);
+  }
 }
 
 function deleteSnapshot(key) {
@@ -2194,44 +2277,46 @@ function saveAssign() {
     const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
     if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
 
+    // 해당 월 스냅샷 없으면 현재 적용 배치 기반으로 생성 (SEATS=9 크기 보장)
     if(!D.scheduleSnapshots[monthKey]) {
       const copy = {};
       DAYS.forEach(d => {
         copy[d] = {
-          am: [...toArr(D.schedule[d]?.am, SEATS, null)],
-          pm: [...toArr(D.schedule[d]?.pm, SEATS, null)]
+          am: [...getSchedForDate(monthKey, d, 'am')],
+          pm: [...getSchedForDate(monthKey, d, 'pm')]
         };
       });
       D.scheduleSnapshots[monthKey] = copy;
     }
 
+    // 해당 요일 배열 보장 (크기 SEATS=9)
     if(!D.scheduleSnapshots[monthKey][day])
       D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
-    ["am","pm"].forEach(t => {
+    ['am','pm'].forEach(t => {
       D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
     });
     D.scheduleSnapshots[monthKey][day][time][idx] = sid;
 
-    // D.schedule도 동기화 (현재 달이면)
+    // D.schedule 동기화 (현재 달이면) - 안전하게
     const now = new Date();
     if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
+      if(!D.schedule[day]) D.schedule[day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
+      if(!D.schedule[day][time]) D.schedule[day][time] = toArr(null,SEATS,null);
       D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
       D.schedule[day][time][idx] = sid;
     }
 
     persist();
-    closeModal("modal-assign");
+    closeModal('modal-assign');
     renderAdminSeats();
     renderSeatMonthUI();
     const st = sid ? byId(sid) : null;
-    showToast(st ? "✅ " + st.name + " 배정 완료" : "✅ 배정이 제거됐어요");
+    showToast(st ? '✅ ' + st.name + ' 배정 완료' : '✅ 배정이 제거됐어요');
   } catch(err) {
-    showToast("❌ 저장 오류: " + err.message);
+    showToast('❌ 저장 오류: ' + err.message);
     console.error(err);
   }
 }
-
-
 
 
 
