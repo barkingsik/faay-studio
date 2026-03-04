@@ -683,11 +683,6 @@
       <button class="action-chip chip-noshow" id="chip-ns" onclick="doAction('noshow')">🚫 미사용</button>
     </div>
   </div>
-  <div id="my-banner-none" class="my-seat-banner no-seat" style="display:none">
-    <div class="my-seat-label">내 좌석</div>
-    <div style="font-size:14px;font-weight:400;color:var(--text2)">이 시간대에 배정된 좌석이 없어요</div>
-  </div>
-
   <div style="margin:8px 20px 0;padding:10px 14px;background:rgba(90,80,144,0.07);border:1.5px solid rgba(90,80,144,0.18);border-radius:12px;font-size:12px;color:var(--text2);line-height:1.6;">
     🪑 보조좌석은 1:1 수업시간과 작업실 사용 시간 사이가 뜨거나 임시적으로만 사용하는 용도로 예약하세요. (하루종일 사용 금지) (하루종일 사용 금지)
   </div>
@@ -1143,6 +1138,8 @@ function ensureDefaults() {
   if(!D.times) D.times={};
   if(!D.reservations) D.reservations={};
   if(!D.closedDates) D.closedDates={};
+  if(!D.closedMsgs) D.closedMsgs={};
+  if(!D.auxReservations) D.auxReservations={};
   if(!D.dateStatus) D.dateStatus={};
   if(!D.dateTimes) D.dateTimes={};
   if(!D.dateReservations) D.dateReservations={};
@@ -1428,9 +1425,8 @@ function myIdx() { return (D.schedule[S.day]?.[S.time]||[]).indexOf(S.studentId)
 function renderBanner() {
   const idx=myIdx();
   const banner=document.getElementById('my-banner');
-  const none=document.getElementById('my-banner-none');
-  if(idx===-1){banner.style.display='none';none.style.display='block';return;}
-  banner.style.display='block';none.style.display='none';
+  if(idx===-1){banner.style.display='none';return;}
+  banner.style.display='block';
   document.getElementById('my-seatname').textContent=slabel(idx);
   const today=isSelectedToday();
   const _dk=selectedDateKey();
@@ -2381,7 +2377,9 @@ function renderGridA() {
   if(slotClosed){
     const slotLabel=S.adminTimeA==='am'?'오전':'오후';
     const cdVal=D.closedDates[dateToKey(adDate)];
-    const msg=(cdVal==='all'||cdVal===true)?'전체 휴무일이에요':slotLabel+' 휴무일이에요';
+    const defaultMsg=(cdVal==='all'||cdVal===true)?'전체 휴무일이에요':slotLabel+' 휴무일이에요';
+    const customMsg=D.closedMsgs?.[dateToKey(adDate)]||'';
+    const msg=defaultMsg+(customMsg?' — '+customMsg:'');
     grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px 20px;color:#e85a5a;font-size:14px;font-weight:700;">🔒 '+msg+'</div>';
     return;
   }
