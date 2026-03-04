@@ -840,14 +840,14 @@
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body" style="max-height:52vh;overflow-y:auto;"></div>
     <div style="padding:12px 20px 20px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <div style="width:17%;">
+      <div style="display:flex;gap:12px;margin-bottom:8px;justify-content:center;">
+        <div style="text-align:center;">
           <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 시작일</label>
-          <input type="date" id="seat-apply-date" style="width:100%;padding:6px 2px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:9px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+          <input type="date" id="seat-apply-date" style="padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;width:130px;">
         </div>
-        <div style="width:17%;">
+        <div style="text-align:center;">
           <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 마지막일</label>
-          <input type="date" id="seat-apply-end" style="width:100%;padding:6px 2px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:9px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+          <input type="date" id="seat-apply-end" style="padding:6px 4px;border-radius:8px;border:1.5px solid var(--tag-border);font-size:10px;background:rgba(255,255,255,0.8);box-sizing:border-box;width:130px;">
         </div>
       </div>
       <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 배치 저장</button>
