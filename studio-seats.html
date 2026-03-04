@@ -916,10 +916,22 @@
     <div class="modal-handle"></div>
     <div class="modal-title" id="mcd-title"></div>
     <div class="modal-sub" id="mcd-sub" style="margin-bottom:14px;"></div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px;">
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
       <button class="action-chip" id="mcd-all" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('all')"></button>
       <button class="action-chip" id="mcd-am" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('am')"></button>
       <button class="action-chip" id="mcd-pm" style="padding:14px;font-size:13px;border-radius:12px;" onclick="setClosedSlot('pm')"></button>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px;">💬 휴무 메시지 <span style="font-weight:400;color:var(--text3);">(선택)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="mcd-msg-chips">
+        <button class="action-chip" onclick="setClosedMsg('')" style="font-size:11px;padding:5px 12px;border-radius:20px;">없음</button>
+        <button class="action-chip" onclick="setClosedMsg('작업실 정기 휴일이에요')" style="font-size:11px;padding:5px 12px;border-radius:20px;">작업실 정기 휴일</button>
+        <button class="action-chip" onclick="setClosedMsg('워크샵 / 크리틱이 있어요')" style="font-size:11px;padding:5px 12px;border-radius:20px;">워크샵 / 크리틱</button>
+        <button class="action-chip" onclick="setClosedMsg('즐거운 연휴 되세요 🎉')" style="font-size:11px;padding:5px 12px;border-radius:20px;">즐거운 연휴</button>
+      </div>
+      <input type="text" id="mcd-msg-input" placeholder="직접 입력..." maxlength="30"
+        style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:12px;background:rgba(255,255,255,0.8);box-sizing:border-box;font-family:Noto Sans KR,sans-serif;"
+        oninput="_closedMsgVal=this.value">
     </div>
     <button class="btn-ghost" onclick="closeModal('modal-closed')">닫기</button>
   </div>
@@ -1504,10 +1516,12 @@ function renderGridS() {
   if(isSelectedClosed()){
     const d=dayToDate(S.day,S.weekOffset);
     const label=today?'오늘은':'이 날은';
+    const closedKey=dateKey(d.getFullYear(),d.getMonth(),d.getDate());
+    const customMsg=D.closedMsgs?.[closedKey]||'';
     grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px 20px;">'+
       '<div style="font-size:36px;margin-bottom:12px;">🏄‍♀️</div>'+
       '<div style="font-size:22px;color:#e85a5a;font-weight:700;margin-bottom:6px;">작업실 닫아요</div>'+
-      '<div style="font-size:13px;color:var(--text2);">에너지 충전하고 돌아옵시다</div>'+
+      '<div style="font-size:13px;color:var(--text2);">'+(customMsg||'에너지 충전하고 돌아옵시다')+'</div>'+
       '</div>';
     return;
   }
@@ -2685,23 +2699,44 @@ function toggleClosed(y,m,d){
   btnAm.style.cssText='padding:14px;font-size:13px;border-radius:12px;border:1.5px solid '+(amClosed?'#e8a020':'var(--tag-border)')+';background:'+(amClosed?'rgba(232,160,32,0.12)':'')+';color:'+(amClosed?'#e8a020':'var(--text)')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;font-weight:700;';
   btnPm.textContent=pmClosed?'✅ 오후 휴무 (해제하기)':'🌇 오후만 휴무 (15-20시)';
   btnPm.style.cssText='padding:14px;font-size:13px;border-radius:12px;border:1.5px solid '+(pmClosed?'#e8a020':'var(--tag-border)')+';background:'+(pmClosed?'rgba(232,160,32,0.12)':'')+';color:'+(pmClosed?'#e8a020':'var(--text)')+';cursor:pointer;font-family:Noto Sans KR,sans-serif;font-weight:700;';
+  // 기존 메시지 불러오기
+  const existMsg = D.closedMsgs?.[key] || '';
+  _closedMsgVal = existMsg;
+  const msgInput = document.getElementById('mcd-msg-input');
+  if(msgInput) msgInput.value = existMsg;
   openModal('modal-closed');
+}
+
+let _closedMsgVal = '';
+
+function setClosedMsg(msg) {
+  _closedMsgVal = msg;
+  const input = document.getElementById('mcd-msg-input');
+  if(input) input.value = msg;
 }
 
 function setClosedSlot(slot){
   const key=dateKey(_cdY,_cdM,_cdD);
   const val=D.closedDates[key];
   const dow=new Date(_cdY,_cdM,_cdD).getDay();
+  // 메시지 저장
+  const msg = (document.getElementById('mcd-msg-input')?.value || _closedMsgVal || '').trim();
+  if(!D.closedMsgs) D.closedMsgs = {};
   if(slot==='all'){
     const cur=(val===true||val==='all'||(val===undefined&&dow===6));
     D.closedDates[key]=cur?false:'all';
+    if(!cur && msg) D.closedMsgs[key]=msg; else if(cur) delete D.closedMsgs[key];
     showToast(cur?'✅ '+_cdD+'일 전체 운영으로 변경':'🔒 '+_cdD+'일 전체 휴무 설정');
   } else if(slot==='am'){
-    D.closedDates[key]=(val==='am')?false:'am';
-    showToast(val==='am'?'✅ 오전 운영으로 변경':'🔒 오전 휴무 설정');
+    const cur=(val==='am');
+    D.closedDates[key]=cur?false:'am';
+    if(!cur && msg) D.closedMsgs[key]=msg; else if(cur) delete D.closedMsgs[key];
+    showToast(cur?'✅ 오전 운영으로 변경':'🔒 오전 휴무 설정');
   } else {
-    D.closedDates[key]=(val==='pm')?false:'pm';
-    showToast(val==='pm'?'✅ 오후 운영으로 변경':'🔒 오후 휴무 설정');
+    const cur=(val==='pm');
+    D.closedDates[key]=cur?false:'pm';
+    if(!cur && msg) D.closedMsgs[key]=msg; else if(cur) delete D.closedMsgs[key];
+    showToast(cur?'✅ 오후 운영으로 변경':'🔒 오후 휴무 설정');
   }
   persist();
   closeModal('modal-closed');
