@@ -940,6 +940,22 @@
   </div>
 </div>
 
+<!-- Auxiliary seat time reservation -->
+<div class="modal-overlay" id="modal-aux" onclick="closeModal('modal-aux')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🪑 보조좌석 예약</div>
+    <div class="modal-sub" id="aux-sub"></div>
+    <div id="aux-existing" style="margin-bottom:12px;"></div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:8px;">사용 시간 선택 <span style="font-weight:400;color:var(--text3);">(1시간 단위)</span></label>
+      <div id="aux-hours" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+    <button class="btn-primary" onclick="confirmAuxReserv()">예약하기</button>
+    <button class="btn-ghost" onclick="closeModal('modal-aux')">닫기</button>
+  </div>
+</div>
+
 <!-- Seat assignment -->
 <div class="modal-overlay" id="modal-assign" onclick="closeModal('modal-assign')">
   <div class="modal" onclick="event.stopPropagation()">
@@ -1536,6 +1552,32 @@ function renderGridS() {
   }
   grid.innerHTML='';
   for(let i=0;i<SEATS;i++){
+    // 보조좌석(i===8) 별도 렌더
+    if(i===8){
+      const dk2=selectedDateKey();
+      const auxResvs=getAuxReservations(dk2,S.time);
+      const myResvs=auxResvs.filter(r=>r.sid===S.studentId);
+      const otherResvs=auxResvs.filter(r=>r.sid!==S.studentId);
+      const card=document.createElement('div');
+      card.className='seat-card'+(myResvs.length?' reserved-mine':'');
+      card.style.cssText='cursor:pointer;';
+      let innerHtml='<div><div class="seat-num">보조좌석</div>';
+      if(myResvs.length){
+        innerHtml+=myResvs.map(r=>'<div style="font-size:10px;color:#FF28A7;font-weight:700;margin-top:2px;">'+r.start+':00–'+r.end+':00</div>').join('');
+      }
+      if(otherResvs.length){
+        innerHtml+='<div style="font-size:9px;color:var(--text3);margin-top:3px;">예약 '+otherResvs.length+'건</div>';
+      }
+      if(!myResvs.length&&!otherResvs.length){
+        innerHtml+='<div style="font-size:11px;color:var(--text3);margin-top:4px;">탭하여 예약</div>';
+      }
+      innerHtml+='</div>';
+      if(myResvs.length) innerHtml+='<div class="float-badge" style="background:#FF28A7;color:#fff;">내 예약</div>';
+      card.innerHTML=innerHtml;
+      card.onclick=()=>openAuxModal();
+      grid.appendChild(card);
+      continue;
+    }
     const sid=sched[i], st=sid?stat[i]:'empty';
     const student=sid?byId(sid):null;
     const name=student?student.name:null;
@@ -1677,7 +1719,117 @@ function addResvLog(dk, slot, seatIdx, action) {
   };
 }
 
+// ── 보조좌석 시간 예약 ──
+function openAuxModal() {
+  const dk = selectedDateKey();
+  const slot = S.time;
+  const hours = slot === 'am' ? [10,11,12,13,14] : [15,16,17,18,19];
+  const reservations = (D.auxReservations?.[dk]?.[slot] || []);
+
+  // 현재 내 예약
+  const myResvs = reservations.filter(r => r.sid === S.studentId);
+
+  // 서브 텍스트
+  document.getElementById('aux-sub').textContent =
+    slot === 'am' ? '오전 10:00 – 15:00' : '오후 15:00 – 20:00';
+
+  // 기존 예약 목록
+  const existEl = document.getElementById('aux-existing');
+  if(myResvs.length) {
+    existEl.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">내 예약</div>' +
+      myResvs.map(r =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(255,40,167,0.08);border-radius:8px;margin-bottom:4px;border:1px solid #FF28A7;">
+          <span style="font-size:12px;font-weight:700;color:#FF28A7;">${r.start}:00 – ${r.end}:00</span>
+          <button onclick="cancelAuxReserv('${dk}','${slot}',${r.start})" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1.5px solid #FF28A7;background:none;color:#FF28A7;cursor:pointer;">취소</button>
+        </div>`
+      ).join('');
+  } else {
+    existEl.innerHTML = '';
+  }
+
+  // 시간 슬롯 버튼 렌더
+  const hoursEl = document.getElementById('aux-hours');
+  hoursEl.innerHTML = '';
+  hours.forEach(h => {
+    const taken = reservations.filter(r => r.sid !== S.studentId)
+      .some(r => h >= r.start && h < r.end);
+    const isMine = myResvs.some(r => h >= r.start && h < r.end);
+    const btn = document.createElement('button');
+    btn.textContent = `${h}:00–${h+1}:00`;
+    btn.dataset.hour = h;
+    btn.className = 'action-chip';
+    btn.style.cssText = `font-size:11px;padding:7px 12px;border-radius:20px;` +
+      (isMine ? 'border-color:#FF28A7;background:rgba(255,40,167,0.15);color:#FF28A7;' :
+       taken  ? 'opacity:0.35;cursor:not-allowed;border-color:#ccc;color:#aaa;' : '');
+    btn.disabled = taken;
+    if(!taken && !isMine) btn.onclick = () => toggleAuxHour(btn, h);
+    hoursEl.appendChild(btn);
+  });
+
+  // 선택 초기화
+  window._auxSelectedHours = [];
+  openModal('modal-aux');
+}
+
+function toggleAuxHour(btn, h) {
+  const sel = window._auxSelectedHours || [];
+  const i = sel.indexOf(h);
+  if(i === -1) {
+    sel.push(h);
+    btn.style.background = 'rgba(90,80,144,0.2)';
+    btn.style.borderColor = 'var(--body-purple)';
+    btn.style.color = 'var(--body-purple)';
+  } else {
+    sel.splice(i, 1);
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }
+  window._auxSelectedHours = sel;
+}
+
+function confirmAuxReserv() {
+  const hours = (window._auxSelectedHours || []).sort((a,b)=>a-b);
+  if(!hours.length) { showToast('시간을 선택해주세요'); return; }
+  const dk = selectedDateKey();
+  const slot = S.time;
+  if(!D.auxReservations) D.auxReservations = {};
+  if(!D.auxReservations[dk]) D.auxReservations[dk] = {};
+  if(!D.auxReservations[dk][slot]) D.auxReservations[dk][slot] = [];
+
+  // 연속된 시간을 하나의 블록으로 묶기
+  const blocks = [];
+  let start = hours[0], end = hours[0]+1;
+  for(let i=1;i<hours.length;i++){
+    if(hours[i]===end) { end++; }
+    else { blocks.push({sid:S.studentId,start,end}); start=hours[i]; end=hours[i]+1; }
+  }
+  blocks.push({sid:S.studentId,start,end});
+
+  blocks.forEach(b => D.auxReservations[dk][slot].push(b));
+  persist();
+  showToast(`✅ 보조좌석 ${blocks.map(b=>b.start+':00–'+b.end+':00').join(', ')} 예약 완료!`);
+  closeModal('modal-aux');
+  renderGridS(); renderStatsS();
+}
+
+function cancelAuxReserv(dk, slot, startHour) {
+  if(!D.auxReservations?.[dk]?.[slot]) return;
+  D.auxReservations[dk][slot] = D.auxReservations[dk][slot]
+    .filter(r => !(r.sid === S.studentId && r.start === startHour));
+  persist();
+  showToast('예약이 취소됐어요');
+  openAuxModal(); // 모달 새로고침
+  renderGridS(); renderStatsS();
+}
+
+function getAuxReservations(dk, slot) {
+  return D.auxReservations?.[dk]?.[slot] || [];
+}
+
 function toggleReservation(idx) {
+  // 보조좌석은 시간 선택 모달로
+  if(idx === 8) { openAuxModal(); return; }
   const dk=selectedDateKey();
   const {sched,stat,resv}=getDateData(dk,S.time);
   const cur=resv[idx];
