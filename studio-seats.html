@@ -1322,7 +1322,7 @@ function isSelectedToday() {
 // 선택된 날짜가 휴무인지
 function isSelectedClosed() {
   const d = dayToDate(S.day, S.weekOffset);
-  return isClosed(d.getFullYear(), d.getMonth(), d.getDate());
+  return isClosed(d.getFullYear(), d.getMonth(), d.getDate(), S.time);
 }
 
 // ════════════════════════════════════════
@@ -1378,7 +1378,13 @@ function renderDaysS() {
     if(closed) b.style.cssText+='border-color:#e85a5a;color:#e85a5a;opacity:'+(isPast?'0.4':'0.85')+';';
     b.innerHTML='<span style="display:block;font-size:12px;">'+d+'</span>'+
       '<span style="display:block;font-size:9px;font-family:monospace;margin-top:1px;opacity:0.7;">'+(date.getMonth()+1)+'/'+date.getDate()+'</span>';
-    b.onclick=()=>{S.day=d;renderDaysS();renderBanner();renderStatsS();renderGridS();};
+    b.onclick=()=>{
+      S.day=d;
+      // active 클래스만 업데이트 (스크롤 유지)
+      btnRow.querySelectorAll('.day-btn').forEach(btn=>btn.classList.remove('active'));
+      b.classList.add('active');
+      renderBanner();renderStatsS();renderGridS();
+    };
     btnRow.appendChild(b);
   });
   container.appendChild(btnRow);
