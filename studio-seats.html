@@ -1555,26 +1555,43 @@ function renderGridS() {
     // 보조좌석(i===8) 별도 렌더
     if(i===8){
       const dk2=selectedDateKey();
+      const sid8=sched[8], st8=sid8?stat[8]:'empty';
+      const student8=sid8?byId(sid8):null;
+      const isMine8=sid8===S.studentId;
       const auxResvs=getAuxReservations(dk2,S.time);
       const myResvs=auxResvs.filter(r=>r.sid===S.studentId);
       const otherResvs=auxResvs.filter(r=>r.sid!==S.studentId);
       const card=document.createElement('div');
-      card.className='seat-card'+(myResvs.length?' reserved-mine':'');
-      card.style.cssText='cursor:pointer;';
-      let innerHtml='<div><div class="seat-num">보조좌석</div>';
-      if(myResvs.length){
-        innerHtml+=myResvs.map(r=>'<div style="font-size:10px;color:#FF28A7;font-weight:700;margin-top:2px;">'+r.start+':00–'+r.end+':00</div>').join('');
+
+      // 배치된 학생이 있으면 일반 좌석처럼 표시
+      if(sid8){
+        let dispSt8='empty';
+        if(st8==='present') dispSt8='present';
+        else if(st8==='noshow') dispSt8='noshow';
+        card.className='seat-card '+dispSt8;
+        let inner='<div><div class="seat-num">보조좌석</div>';
+        inner+='<div class="seat-name">'+(student8?student8.name:'')+'</div></div>';
+        inner+='<div class="seat-status"><div class="status-dot"></div><div class="status-text">'+(st8==='present'?'출석 중':st8==='noshow'?'미사용':st8==='checkout'?'체크아웃':'미확인')+'</div></div>';
+        card.innerHTML=inner;
+      } else {
+        // 배치 없음: 시간 예약 카드
+        card.className='seat-card'+(myResvs.length?' reserved-mine':'');
+        card.style.cssText='cursor:pointer;';
+        let innerHtml='<div><div class="seat-num">보조좌석</div>';
+        if(myResvs.length){
+          innerHtml+=myResvs.map(r=>'<div style="font-size:10px;color:#FF28A7;font-weight:700;margin-top:2px;">'+r.start+':00–'+r.end+':00</div>').join('');
+        }
+        if(otherResvs.length){
+          innerHtml+='<div style="font-size:9px;color:var(--text3);margin-top:3px;">예약 '+otherResvs.length+'건</div>';
+        }
+        if(!myResvs.length&&!otherResvs.length){
+          innerHtml+='<div style="font-size:11px;color:var(--text3);margin-top:4px;">탭하여 예약</div>';
+        }
+        innerHtml+='</div>';
+        if(myResvs.length) innerHtml+='<div class="float-badge" style="background:#FF28A7;color:#fff;">내 예약</div>';
+        card.innerHTML=innerHtml;
+        card.onclick=()=>openAuxModal();
       }
-      if(otherResvs.length){
-        innerHtml+='<div style="font-size:9px;color:var(--text3);margin-top:3px;">예약 '+otherResvs.length+'건</div>';
-      }
-      if(!myResvs.length&&!otherResvs.length){
-        innerHtml+='<div style="font-size:11px;color:var(--text3);margin-top:4px;">탭하여 예약</div>';
-      }
-      innerHtml+='</div>';
-      if(myResvs.length) innerHtml+='<div class="float-badge" style="background:#FF28A7;color:#fff;">내 예약</div>';
-      card.innerHTML=innerHtml;
-      card.onclick=()=>openAuxModal();
       grid.appendChild(card);
       continue;
     }
