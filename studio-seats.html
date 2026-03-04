@@ -1575,8 +1575,13 @@ function renderGridS() {
         if(st8==='present') dispSt8='present';
         else if(st8==='noshow') dispSt8='noshow';
         card.className='seat-card '+dispSt8;
+        // 입실 시간 — 일반 좌석과 동일한 구조로 읽기
+        const tRec8 = (sid8 && D.dateTimes?.[dk2]?.[S.time]?.[8]) || {};
+        const checkinTime8 = tRec8.in || null;
         let inner='<div><div class="seat-num">보조좌석</div>';
-        inner+='<div class="seat-name">'+(student8?student8.name:'')+'</div></div>';
+        inner+='<div class="seat-name">'+(student8?student8.name:'')+'</div>';
+        if(checkinTime8 && st8==='present') inner+='<div style="font-size:10px;color:var(--teal);font-family:monospace;margin-top:2px;">입실 '+checkinTime8+'</div>';
+        inner+='</div>';
         inner+='<div class="seat-status"><div class="status-dot"></div><div class="status-text">'+(st8==='present'?'출석 중':st8==='noshow'?'미사용':st8==='checkout'?'체크아웃':'미확인')+'</div></div>';
         card.innerHTML=inner;
       } else {
