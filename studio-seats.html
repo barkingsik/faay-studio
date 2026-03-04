@@ -935,7 +935,7 @@
       <label>배정할 학생</label>
       <select id="ma-sel" onclick="event.stopPropagation()" onchange="event.stopPropagation()"></select>
     </div>
-    <button class="btn-primary" onclick="try{saveAssign()}catch(e){alert('에러: '+e.message)}">저장</button>
+    <button class="btn-primary" onclick="saveAssign()">저장</button>
     <button class="btn-ghost" onclick="closeModal('modal-assign')">닫기</button>
   </div>
 </div>
@@ -1075,9 +1075,23 @@ function load() {
 }
 
 // 데이터 저장 (Firebase + localStorage 백업)
+function cleanUndefined(obj) {
+  if(Array.isArray(obj)) return obj.map(v => v === undefined ? null : cleanUndefined(v));
+  if(obj !== null && typeof obj === 'object') {
+    const out = {};
+    for(const k of Object.keys(obj)) {
+      if(obj[k] === undefined) continue; // undefined 키 제거
+      out[k] = cleanUndefined(obj[k]);
+    }
+    return out;
+  }
+  return obj;
+}
+
 function persist() {
-  DB_REF.set(D);
-  try { localStorage.setItem('studio_v3', JSON.stringify(D)); } catch(e){}
+  const clean = cleanUndefined(D);
+  DB_REF.set(clean);
+  try { localStorage.setItem('studio_v3', JSON.stringify(clean)); } catch(e){}
 }
 
 // 기본값 보장
