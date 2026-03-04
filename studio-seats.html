@@ -838,16 +838,16 @@
       <button class="time-toggle" id="at-pm" onclick="setAdminTime('pm')">오후 15-20시</button>
     </div>
     <div class="admin-grid-header" id="a-grid-hdr"></div>
-    <div id="a-grid-body"></div>
+    <div id="a-grid-body" style="max-height:52vh;overflow-y:auto;"></div>
     <div style="padding:12px 20px 20px;">
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
-        <div>
-          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 적용 시작일</label>
-          <input type="date" id="seat-apply-date" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <div style="flex:1;">
+          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 시작일</label>
+          <input type="date" id="seat-apply-date" style="width:100%;padding:9px 6px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:11px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
         </div>
-        <div>
-          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 적용 마지막일 <span style="font-weight:400;color:var(--text3);">(미설정 시 다음 배치 전까지)</span></label>
-          <input type="date" id="seat-apply-end" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
+        <div style="flex:1;">
+          <label style="font-size:11px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 마지막일</label>
+          <input type="date" id="seat-apply-end" style="width:100%;padding:9px 6px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:11px;background:rgba(255,255,255,0.8);box-sizing:border-box;">
         </div>
       </div>
       <button class="btn-primary" onclick="saveMonthlySchedule()" id="seat-save-btn">💾 배치 저장</button>
