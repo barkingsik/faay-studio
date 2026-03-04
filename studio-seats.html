@@ -935,7 +935,7 @@
       <label>배정할 학생</label>
       <select id="ma-sel" onclick="event.stopPropagation()" onchange="event.stopPropagation()"></select>
     </div>
-    <button class="btn-primary" onclick="saveAssign()">저장</button>
+    <button class="btn-primary" onclick="try{saveAssign()}catch(e){alert('에러: '+e.message)}">저장</button>
     <button class="btn-ghost" onclick="closeModal('modal-assign')">닫기</button>
   </div>
 </div>
