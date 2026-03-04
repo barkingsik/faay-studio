@@ -1977,44 +1977,56 @@ function deleteSnapshot(key) {
 }
 
 function saveAssign() {
-  if(!S.assignTarget){ showToast('⚠️ 오류 발생, 다시 시도해주세요'); return; }
-  const day = S.assignTarget.day;
-  const time = S.assignTarget.time;
-  const idx = Number(S.assignTarget.idx);
-  const selEl = document.getElementById('ma-sel');
-  const sid = selEl.value ? selEl.value : null;
+  try {
+    if(!S.assignTarget){ showToast('⚠️ 오류 발생, 다시 시도해주세요'); return; }
+    const day = S.assignTarget.day;
+    const time = S.assignTarget.time;
+    const idx = Number(S.assignTarget.idx);
+    const selEl = document.getElementById('ma-sel');
+    const sid = selEl.value ? selEl.value : null;
 
-  // 스냅샷 기반으로만 저장 (D.schedule 직접 수정 안 함)
-  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
-  if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
+    const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+    if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
 
-  // 해당 월 스냅샷이 없으면 현재 가장 최신 스냅샷(또는 D.schedule)을 복사해서 생성
-  if(!D.scheduleSnapshots[monthKey]) {
-    const copy = {};
-    DAYS.forEach(d => {
-      // getSchedForDate 방식으로 해당 월 기준 배치 가져오기
-      const amArr = getSchedForDate(monthKey, d, 'am');
-      const pmArr = getSchedForDate(monthKey, d, 'pm');
-      copy[d] = { am: [...amArr], pm: [...pmArr] };
+    if(!D.scheduleSnapshots[monthKey]) {
+      const copy = {};
+      DAYS.forEach(d => {
+        copy[d] = {
+          am: [...toArr(D.schedule[d]?.am, SEATS, null)],
+          pm: [...toArr(D.schedule[d]?.pm, SEATS, null)]
+        };
+      });
+      D.scheduleSnapshots[monthKey] = copy;
+    }
+
+    if(!D.scheduleSnapshots[monthKey][day])
+      D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
+    ["am","pm"].forEach(t => {
+      D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
     });
-    D.scheduleSnapshots[monthKey] = copy;
+    D.scheduleSnapshots[monthKey][day][time][idx] = sid;
+
+    // D.schedule도 동기화 (현재 달이면)
+    const now = new Date();
+    if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
+      D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
+      D.schedule[day][time][idx] = sid;
+    }
+
+    persist();
+    closeModal("modal-assign");
+    renderAdminSeats();
+    renderSeatMonthUI();
+    const st = sid ? byId(sid) : null;
+    showToast(st ? "✅ " + st.name + " 배정 완료" : "✅ 배정이 제거됐어요");
+  } catch(err) {
+    showToast("❌ 저장 오류: " + err.message);
+    console.error(err);
   }
-
-  // 해당 칸만 수정
-  if(!D.scheduleSnapshots[monthKey][day])
-    D.scheduleSnapshots[monthKey][day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
-  ['am','pm'].forEach(t => {
-    D.scheduleSnapshots[monthKey][day][t] = toArr(D.scheduleSnapshots[monthKey][day][t], SEATS, null);
-  });
-  D.scheduleSnapshots[monthKey][day][time][idx] = sid;
-
-  persist();
-  closeModal('modal-assign');
-  renderAdminSeats();
-  renderSeatMonthUI();
-  const s = sid ? byId(sid) : null;
-  showToast(s ? '✅ ' + s.name + ' 배정 완료' : '✅ 배정이 제거됐어요');
 }
+
+
+
 
 
 // ── Status tab ──
