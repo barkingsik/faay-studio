@@ -824,41 +824,34 @@
 
   <!-- Seat schedule -->
   <div class="admin-panel" id="apanel-seats">
-    <!-- 월 선택 -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;">
-      <button onclick="seatMonthMove(-1)" style="background:none;border:1.5px solid var(--tag-border);border-radius:20px;padding:4px 14px;font-size:15px;color:var(--body-purple);cursor:pointer;">‹</button>
-      <div id="seat-month-label" style="font-size:14px;font-weight:700;color:var(--body-purple);font-family:'Noto Sans KR',sans-serif;"></div>
-      <button onclick="seatMonthMove(1)" style="background:none;border:1.5px solid var(--tag-border);border-radius:20px;padding:4px 14px;font-size:15px;color:var(--body-purple);cursor:pointer;">›</button>
-    </div>
-    <div style="padding:0 20px 8px;">
-      <div id="seat-month-status" style="font-size:11px;color:var(--text2);padding:8px 12px;background:rgba(90,80,144,0.07);border-radius:10px;line-height:1.6;"></div>
-    </div>
     <div class="time-toggle-row">
       <button class="time-toggle am-on" id="at-am" onclick="setAdminTime('am')">오전 10-15시</button>
       <button class="time-toggle" id="at-pm" onclick="setAdminTime('pm')">오후 15-20시</button>
     </div>
+    <div id="seat-month-status" style="display:none;"></div>
     <div class="admin-grid-header" id="a-grid-hdr"></div>
     <div id="a-grid-body" style="max-height:52vh;overflow-y:auto;"></div>
     <div style="padding:12px 20px 20px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-end;">
-        <div style="flex:1;min-width:0;">
-          <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 시작일</label>
-          <div style="position:relative;overflow:hidden;border-radius:8px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.8);">
-            <span id="seat-date-label" style="display:block;font-size:10px;padding:7px 6px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">날짜 선택</span>
-            <input type="date" id="seat-apply-date" oninput="document.getElementById('seat-date-label').textContent=this.value||'날짜 선택'" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;">
+      <div id="snap-list" style="margin-bottom:14px;"></div>
+      <div id="seat-save-area">
+        <div style="display:flex;gap:8px;margin-bottom:0;align-items:flex-end;">
+          <div style="flex:1;min-width:0;">
+            <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">📅 시작일</label>
+            <div style="position:relative;overflow:hidden;border-radius:8px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.8);">
+              <span id="seat-date-label" style="display:block;font-size:10px;padding:7px 6px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">날짜 선택</span>
+              <input type="date" id="seat-apply-date" oninput="document.getElementById('seat-date-label').textContent=this.value||'날짜 선택'" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;">
+            </div>
           </div>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 마지막일</label>
-          <div style="position:relative;overflow:hidden;border-radius:8px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.8);">
-            <span id="seat-end-label" style="display:block;font-size:10px;padding:7px 6px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">선택 안함</span>
-            <input type="date" id="seat-apply-end" oninput="document.getElementById('seat-end-label').textContent=this.value||'선택 안함';document.getElementById('seat-end-label').style.color=this.value?'var(--text)':'var(--text3)'" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;">
+          <div style="flex:1;min-width:0;">
+            <label style="font-size:10px;color:var(--text2);font-weight:700;display:block;margin-bottom:4px;">🏁 마지막일</label>
+            <div style="position:relative;overflow:hidden;border-radius:8px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.8);">
+              <span id="seat-end-label" style="display:block;font-size:10px;padding:7px 6px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">선택 안함</span>
+              <input type="date" id="seat-apply-end" oninput="document.getElementById('seat-end-label').textContent=this.value||'선택 안함';document.getElementById('seat-end-label').style.color=this.value?'var(--text)':'var(--text3)'" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;">
+            </div>
           </div>
+          <button onclick="saveMonthlySchedule()" id="seat-save-btn" style="flex-shrink:0;padding:7px 12px;border-radius:8px;border:1.5px solid var(--body-purple);background:rgba(90,80,144,0.12);color:var(--body-purple);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;">💾 저장</button>
         </div>
-        <button onclick="saveMonthlySchedule()" id="seat-save-btn" style="flex-shrink:0;padding:7px 12px;border-radius:8px;border:1.5px solid var(--body-purple);background:rgba(90,80,144,0.12);color:var(--body-purple);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:Noto Sans KR,sans-serif;">💾 저장</button>
       </div>
-      
-      <div id="snap-list" style="margin-top:12px;"></div>
     </div>
   </div>
 
@@ -1906,7 +1899,7 @@ function showAdminTab(n) {
     document.getElementById(`apanel-${p}`).classList.toggle('active',p===n);
     document.getElementById(`apill-${p}`).classList.toggle('active',p===n);
   });
-  if(n==='seats'){ previewSnapKey=null; seatEditYear=new Date().getFullYear(); seatEditMonth=new Date().getMonth(); renderAdminSeats(); setTimeout(()=>{renderSeatMonthUI();renderSnapList();},50); }
+  if(n==='seats'){ previewSnapKey=null; renderAdminSeats(); setTimeout(()=>{renderSeatMonthUI();renderSnapList();},50); }
   if(n==='status'){renderDaysA();renderStatsA();renderGridA();}
   if(n==='students')renderStudentList();
   if(n==='calendar')renderCalendar();
@@ -2016,8 +2009,8 @@ function setAdminTime(t) {
 
 function renderAdminSeats() {
   const t=S.adminTime;
-  // 선택된 월의 배치: 스냅샷이 있으면 그걸, 없으면 해당 월 1일 기준 최신 스냅샷
-  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+  const now=new Date();
+  const monthKey = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
   const lookupKey = previewSnapKey || monthKey;
   const snap = D.scheduleSnapshots?.[lookupKey];
   // editSched: day -> {am, pm} 형태로 접근 가능하도록
@@ -2058,7 +2051,7 @@ function openAssignModal(day,time,idx) {
     o.value=s.id; o.textContent=`${s.name} (${s.phone})`; sel.appendChild(o);
   });
   // 현재 편집 중인 월의 스냅샷에서 값 읽기
-  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+  const _now2=new Date(); const monthKey = _now2.getFullYear()+'-'+String(_now2.getMonth()+1).padStart(2,'0')+'-01';
   const snap = D.scheduleSnapshots?.[monthKey];
   const _arr = snap ? toArr(snap[day]?.[time], SEATS, null) : getSchedForDate(monthKey, day, time);
   const curSid = _arr[idx] || '';
@@ -2077,62 +2070,15 @@ function seatMonthMove(dir) {
 }
 
 function renderSeatMonthUI() {
-  const label = document.getElementById('seat-month-label');
-  const status = document.getElementById('seat-month-status');
   const saveBtn = document.getElementById('seat-save-btn');
-  if(!label) return;
-  label.textContent = seatEditYear + '년 ' + (seatEditMonth+1) + '월';
-  const applyDateEl = document.getElementById('seat-apply-date');
-  if(applyDateEl) {
-    const fd = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
-    const ld = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-'+String(new Date(seatEditYear,seatEditMonth+1,0).getDate()).padStart(2,'0');
-    applyDateEl.min=fd; applyDateEl.max=ld;
-    if(!applyDateEl.value||applyDateEl.value.slice(0,7)!==fd.slice(0,7)) applyDateEl.value=fd;
-    const endEl=document.getElementById('seat-apply-end');
-    if(endEl){endEl.min=fd; endEl.max=ld; endEl.value='';}
-  }
+  const saveArea = document.getElementById('seat-save-area');
 
-  // 이 월에 저장된 배치 스냅샷이 있는지 확인
-  const snaps = D.scheduleSnapshots || {};
-  // 해당 월의 1일 키
-  const monthKey = seatEditYear + '-' + String(seatEditMonth+1).padStart(2,'0') + '-01';
-  const now = new Date();
-  const thisYear = now.getFullYear(), thisMonth = now.getMonth();
-  const isPast = seatEditYear < thisYear || (seatEditYear===thisYear && seatEditMonth < thisMonth);
-  const isCurrent = seatEditYear===thisYear && seatEditMonth===thisMonth;
-
-  if(snaps[monthKey]) {
-    status.innerHTML = '✅ <b>' + (seatEditMonth+1) + '월 배치</b>가 저장되어 있어요. 아래에서 수정 후 다시 저장할 수 있어요.';
-    status.style.background = 'rgba(58,122,90,0.1)';
-    saveBtn.textContent = '💾 배치 업데이트';
-  } else if(isCurrent) {
-    status.innerHTML = '📋 현재 기본 배치를 표시 중이에요. 수정 후 저장하면 <b>이번 달부터</b> 적용돼요.';
-    status.style.background = 'rgba(90,80,144,0.07)';
-    saveBtn.textContent = '💾 배치 저장';
-  } else if(isPast) {
-    status.innerHTML = '📁 지난 달이에요. 수정해도 과거 기록에만 영향을 줘요.';
-    status.style.background = 'rgba(180,180,180,0.1)';
-    saveBtn.textContent = '💾 배치 저장';
-  } else {
-    status.innerHTML = '📅 <b>' + (seatEditMonth+1) + '월</b> 배치를 미리 설정할 수 있어요. 저장하면 해당 월 1일부터 적용돼요.';
-    status.style.background = 'rgba(90,80,144,0.07)';
-    saveBtn.textContent = '💾 배치 저장';
-  }
-
-  // 미리보기 모드 오버라이드
+  // 미리보기 모드면 저장 영역 숨기기
   if(previewSnapKey) {
-    const endD = snaps[previewSnapKey]?._end;
-    const snapLabel = endD ? previewSnapKey + ' ~ ' + endD : previewSnapKey + ' 이후';
-    status.innerHTML = '👁 <b>미리보기:</b> ' + snapLabel + ' — 이 배치는 수정할 수 없어요.';
-    status.style.background = 'rgba(90,80,144,0.12)';
-    status.style.border = '1.5px dashed var(--body-purple)';
-    // 저장 버튼·날짜 입력 숨기기
-    const saveBtnRow = saveBtn?.parentElement;
-    if(saveBtnRow) saveBtnRow.style.display='none';
+    if(saveArea) saveArea.style.display='none';
   } else {
-    status.style.border = '';
-    const saveBtnRow = saveBtn?.parentElement;
-    if(saveBtnRow) saveBtnRow.style.display='';
+    if(saveArea) saveArea.style.display='';
+    if(saveBtn) saveBtn.textContent = '💾 저장';
   }
 }
 
@@ -2142,7 +2088,7 @@ function saveMonthlySchedule() {
   if(!startDate){ showToast('적용 시작일을 선택해주세요'); return; }
   if(endDate && endDate < startDate){ showToast('마지막일은 시작일 이후여야 해요'); return; }
   if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
-  const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+  const _now2=new Date(); const monthKey = _now2.getFullYear()+'-'+String(_now2.getMonth()+1).padStart(2,'0')+'-01';
   const snap = D.scheduleSnapshots?.[monthKey];
   const copy = {};
   DAYS.forEach(d => {
@@ -2274,7 +2220,7 @@ function saveAssign() {
     const selEl = document.getElementById('ma-sel');
     const sid = selEl.value ? selEl.value : null;
 
-    const monthKey = seatEditYear+'-'+String(seatEditMonth+1).padStart(2,'0')+'-01';
+    const _now=new Date(); const monthKey = _now.getFullYear()+'-'+String(_now.getMonth()+1).padStart(2,'0')+'-01';
     if(!D.scheduleSnapshots) D.scheduleSnapshots = {};
 
     // 해당 월 스냅샷 없으면 현재 적용 배치 기반으로 생성 (SEATS=9 크기 보장)
@@ -2299,7 +2245,7 @@ function saveAssign() {
 
     // D.schedule 동기화 (현재 달이면) - 안전하게
     const now = new Date();
-    if(seatEditYear===now.getFullYear() && seatEditMonth===now.getMonth()) {
+    if(true) { // 항상 D.schedule 동기화
       if(!D.schedule[day]) D.schedule[day] = { am: toArr(null,SEATS,null), pm: toArr(null,SEATS,null) };
       if(!D.schedule[day][time]) D.schedule[day][time] = toArr(null,SEATS,null);
       D.schedule[day][time] = toArr(D.schedule[day][time], SEATS, null);
