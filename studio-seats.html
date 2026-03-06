@@ -1425,7 +1425,11 @@ function setTimeS(t) {
   renderBanner(); renderStatsS(); renderGridS();
 }
 
-function myIdx() { return (D.schedule[S.day]?.[S.time]||[]).indexOf(S.studentId); }
+function myIdx() {
+  const dk = selectedDateKey();
+  const sched = getSchedForDate(dk, S.day, S.time);
+  return sched.indexOf(S.studentId);
+}
 
 function renderBanner() {
   const idx=myIdx();
