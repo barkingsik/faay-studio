@@ -699,6 +699,7 @@
   <div class="bottom-bar">
     <div class="bottom-user">👤 <strong id="bottom-name"></strong></div>
     <div style="font-size:11px;color:var(--text3);font-family:'Bpmf Huninn','Space Mono',monospace;" id="bottom-phone"></div>
+    <button onclick="openMyAttModal()" style="font-size:10px;padding:4px 12px;border-radius:20px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.5);color:var(--body-purple);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-weight:700;">📋 내 출석기록</button>
   </div>
 </div>
 
@@ -929,6 +930,22 @@
       </div>
     </div>
     <button class="btn-ghost" onclick="closeModal('modal-closed')">닫기</button>
+  </div>
+</div>
+
+<!-- My attendance record modal -->
+<div class="modal-overlay" id="modal-myatt" onclick="closeModal('modal-myatt')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 내 출석기록</div>
+    <div class="modal-sub" id="myatt-sub"></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;align-items:center;">
+      <button onclick="myAttMove(-1)" style="background:none;border:1.5px solid var(--tag-border);border-radius:20px;padding:4px 14px;font-size:15px;color:var(--body-purple);cursor:pointer;">‹</button>
+      <div id="myatt-month-label" style="flex:1;text-align:center;font-size:13px;font-weight:700;color:var(--body-purple);"></div>
+      <button onclick="myAttMove(1)" style="background:none;border:1.5px solid var(--tag-border);border-radius:20px;padding:4px 14px;font-size:15px;color:var(--body-purple);cursor:pointer;">›</button>
+    </div>
+    <div id="myatt-list"></div>
+    <button class="btn-ghost" onclick="closeModal('modal-myatt')" style="margin-top:8px;">닫기</button>
   </div>
 </div>
 
@@ -1454,11 +1471,13 @@ function renderBanner() {
   ];
   chips.forEach(({id,st:cst})=>{
     const el=document.getElementById(id);
-    el.disabled=!today; el.style.opacity=today?'1':'0.4'; el.style.cursor=today?'pointer':'not-allowed';
+    // 미사용 버튼은 위치 무관, 오늘이면 항상 활성
+    const active = today;
+    el.disabled=!active; el.style.opacity=active?'1':'0.4'; el.style.cursor=active?'pointer':'not-allowed';
     el.style.outline=st===cst?'2.5px solid white':'';
   });
 
-  // 위치 기반 입실/퇴실 버튼 제어 (오늘이고, 위치 설정 있을 때만)
+  // 위치 기반 입실/퇴실 버튼 제어 (오늘이고, 위치 설정 있을 때만) — 미사용(chip-ns)은 제외
   if(today && D.location) {
     const ciBtn = document.getElementById('chip-ci');
     const coBtn = document.getElementById('chip-co');
@@ -1496,6 +1515,10 @@ function renderBanner() {
 
 function doAction(action) {
   if(!isSelectedToday()){showToast('오늘만 변경할 수 있어요');return;}
+  // 입실/퇴실은 위치 확인 필요, 미사용은 어디서든 가능
+  if(action !== 'noshow' && D.location && !S.geoAllowed){
+    showToast('📍 작업실 근처에서만 입실/퇴실할 수 있어요'); return;
+  }
   const idx=myIdx(); if(idx===-1)return;
   const dk=selectedDateKey();
   const dd=getDateData(dk,S.time);
@@ -1503,7 +1526,7 @@ function doAction(action) {
   if(!dd.times[idx]) { dd.times[idx]={in:null,out:null}; D.dateTimes[dk][S.time][idx]={in:null,out:null}; }
   const t=D.dateTimes[dk][S.time][idx];
   if(action==='present') t.in=nowHM();
-  else if(action==='checkout') t.out=nowHM();
+  else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); }
   else if(action==='noshow') { t.in=null; t.out=null; }
   persist(); renderBanner(); renderStatsS(); renderGridS();
   const m={present:'✅ 체크인 완료! '+nowHM(),checkout:'🚪 퇴실 완료! '+nowHM(),noshow:'🚫 오늘 미사용으로 표시했어요'};
@@ -2565,13 +2588,103 @@ function adminStatus(newSt) {
   showToast('✅ 상태가 변경됐어요');
 }
 
+// ── 내 출석기록 (학생용) ──
+let myAttYear = new Date().getFullYear();
+let myAttMonth = new Date().getMonth();
+
+function openMyAttModal() {
+  myAttYear = new Date().getFullYear();
+  myAttMonth = new Date().getMonth();
+  renderMyAtt();
+  openModal('modal-myatt');
+}
+
+function myAttMove(dir) {
+  myAttMonth += dir;
+  if(myAttMonth < 0){ myAttMonth = 11; myAttYear--; }
+  if(myAttMonth > 11){ myAttMonth = 0; myAttYear++; }
+  renderMyAtt();
+}
+
+function renderMyAtt() {
+  document.getElementById('myatt-month-label').textContent = myAttYear+'년 '+(myAttMonth+1)+'월';
+  const sid = S.studentId;
+  const student = byId(sid);
+  document.getElementById('myatt-sub').textContent = student ? student.name+'님의 출석기록' : '';
+
+  const daysInMonth = new Date(myAttYear, myAttMonth+1, 0).getDate();
+  const stLabel = {present:'출석', checkout:'퇴실완료', noshow:'미사용', pending:'미확인'};
+  const stColor = {present:'var(--title-green)', checkout:'var(--teal)', noshow:'var(--title-red)', pending:'var(--text3)'};
+
+  let totalPresent = 0;
+  let rows = '';
+
+  for(let d=1; d<=daysInMonth; d++) {
+    const dk2 = dateKey(myAttYear, myAttMonth, d);
+    const closed = isClosed(myAttYear, myAttMonth, d);
+    if(closed) continue;
+
+    ['am','pm'].forEach(slot => {
+      const dd2 = getDateData(dk2, slot);
+      const seatIdx = dd2.sched.indexOf(sid);
+      if(seatIdx === -1) return; // 이 날 이 슬롯에 배정 없음
+
+      const st = dd2.stat[seatIdx] || 'pending';
+      const tRec = D.dateTimes?.[dk2]?.[slot]?.[seatIdx] || {};
+      const timeStr = [tRec.in?'입실 '+tRec.in:'', tRec.out?'퇴실 '+tRec.out:''].filter(Boolean).join(' · ');
+      const slotLabel = slot==='am'?'오전':'오후';
+      const dayName = dateToDay(myAttYear, myAttMonth, d);
+      const dateStr = (myAttMonth+1)+'/'+d+' ('+dayName+') '+slotLabel;
+
+      if(st==='present'||st==='checkout') totalPresent++;
+
+      rows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.6);border-radius:10px;margin-bottom:5px;">'+
+        '<div>'+
+          '<div style="font-size:12px;font-weight:700;color:var(--text);">'+dateStr+'</div>'+
+          '<div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:monospace;">'+
+            (timeStr||'시간 기록 없음')+
+          '</div>'+
+        '</div>'+
+        '<span style="font-size:11px;font-weight:700;color:'+stColor[st]+';">'+stLabel[st]+'</span>'+
+      '</div>';
+    });
+  }
+
+  const listEl = document.getElementById('myatt-list');
+  if(!rows) {
+    listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;">이 달에 출석 기록이 없어요</div>';
+  } else {
+    listEl.innerHTML =
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;">'+
+        '이번 달 출석 <span style="color:var(--title-green);">'+totalPresent+'회</span>'+
+      '</div>'+
+      rows;
+  }
+}
+
+// 오전 연동 퇴실 헬퍼: 오후 퇴실 시 같은 학생의 오전 슬롯도 checkout 처리
+function syncAmCheckout(dk, seatIdx, outTime) {
+  const amSched = getDateData(dk, 'am').sched;
+  const sid = getDateData(dk, 'pm').sched[seatIdx]; // 오후 퇴실 학생
+  if(!sid) return;
+  const amIdx = amSched.indexOf(sid);
+  if(amIdx === -1) return; // 오전 배정 없음
+  const amStat = getDateData(dk, 'am').stat;
+  if(amStat[amIdx] !== 'present') return; // 오전이 출석 중이 아니면 패스
+  amStat[amIdx] = 'checkout';
+  if(!D.dateTimes[dk]['am'][amIdx]) D.dateTimes[dk]['am'][amIdx] = {in:null, out:null};
+  D.dateTimes[dk]['am'][amIdx].out = outTime;
+}
+
 function adminCheckout() {
   const {day,time,idx}=S.statusTarget;
   const adk=adminSelectedDateKey();
   const dd=getDateData(adk,time);
   dd.stat[idx]='checkout';
   if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
-  D.dateTimes[adk][time][idx].out=nowHM();
+  const t=nowHM();
+  D.dateTimes[adk][time][idx].out=t;
+  if(time==='pm') syncAmCheckout(adk, idx, t);
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('🚪 퇴실 처리됐어요');
 }
@@ -2585,6 +2698,7 @@ function adminCheckoutManual() {
   dd.stat[idx]='checkout';
   if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
   D.dateTimes[adk][time][idx].out=t;
+  if(time==='pm') syncAmCheckout(adk, idx, t);
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('🚪 '+t+' 퇴실 처리됐어요');
 }
