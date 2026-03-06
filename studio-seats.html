@@ -1280,9 +1280,9 @@ function todayD() { return ['일','월','화','수','목','금','토'][new Date(
 function isToday(d) { return d===todayD(); }
 function autoTime() { return new Date().getHours()>=15?'pm':'am'; }
 function nowHM() { const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
-function showToast(m) {
+function showToast(m, duration) {
   const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2200);
+  setTimeout(()=>t.classList.remove('show'), duration||2200);
 }
 function togglePw(id,btn) {
   const el=document.getElementById(id);
@@ -1513,7 +1513,7 @@ function renderBanner() {
     });
     ciBtn.textContent = '📡 확인 중';
     coBtn.textContent = '📡 확인 중';
-    checkGeoForCheckin(allowed => {
+    checkGeoForCheckin((allowed, errType) => {
       S.geoAllowed = allowed;
       if(allowed) {
         [ciBtn, coBtn].forEach(btn => {
@@ -1529,9 +1529,26 @@ function renderBanner() {
           btn.style.opacity = '0.35';
           btn.style.cursor = 'not-allowed';
         });
-        ciBtn.textContent = '📍 범위 밖';
-        coBtn.textContent = '📍 범위 밖';
-        setTimeout(()=>{ ciBtn.textContent = '✅ 입실'; coBtn.textContent = '🚪 퇴실'; }, 3000);
+        const errMsgs = {
+          denied:      '⛔ 위치 권한 차단됨',
+          unavailable: '📡 위치 신호 없음',
+          timeout:     '⏱ 위치 확인 시간 초과',
+          outofrange:  '📍 범위 밖',
+          unsupported: '❌ 위치 미지원',
+        };
+        const errGuides = {
+          denied:      '설정 > 개인정보보호 > 위치서비스 > Safari(또는 브라우저)를 "앱 사용 중"으로 변경 후 "정확한 위치"도 켜주세요.',
+          unavailable: 'Wi-Fi를 켜거나 실외로 이동 후 다시 시도해보세요. VPN이 켜져 있다면 꺼주세요.',
+          timeout:     '위치를 가져오는 데 너무 오래 걸려요. 저전력 모드를 끄거나 잠시 후 다시 시도해보세요.',
+          outofrange:  '작업실 근처에서만 입실할 수 있어요. 위치가 계속 이상하면 관리자에게 문의하세요.',
+          unsupported: '이 기기는 위치 기능을 지원하지 않아요. 관리자에게 문의하세요.',
+        };
+        const msg = errMsgs[errType] || '📍 범위 밖';
+        const guide = errGuides[errType] || '';
+        ciBtn.textContent = msg;
+        coBtn.textContent = msg;
+        if(guide) showToast(guide, 5000);
+        setTimeout(()=>{ ciBtn.textContent = '✅ 입실'; coBtn.textContent = '🚪 퇴실'; }, 5000);
       }
       renderGridS(); // 잠금 배지 업데이트
     });
@@ -1623,7 +1640,7 @@ function renderGridS() {
   const selDate=dayToDate(S.day,S.weekOffset); selDate.setHours(0,0,0,0);
   const nowDate=new Date(); nowDate.setHours(0,0,0,0);
   // 내가 이 날짜+슬롯에 배치된 자리가 있으면 새 예약 불가 (취소는 별도)
-  const iAssigned = (D.schedule[S.day]?.[S.time]||[]).includes(S.studentId);
+  const iAssigned = getSchedForDate(selectedDateKey(), S.day, S.time).includes(S.studentId);
   const canReserve = selDate >= nowDate && !iAssigned; // 새 예약 가능 여부
   const canCancel  = selDate >= nowDate; // 취소는 배치 무관
 
@@ -2795,16 +2812,19 @@ function calcDistance(lat1, lng1, lat2, lng2) {
 // 위치 허용 여부 비동기 체크 (callback: true/false)
 function checkGeoForCheckin(callback) {
   if(!D.location) { callback(true); return; }
-  if(!navigator.geolocation) { callback(false); return; }
+  if(!navigator.geolocation) { callback(false, 'unsupported'); return; }
   navigator.geolocation.getCurrentPosition(
     pos => {
       const dist = calcDistance(
         pos.coords.latitude, pos.coords.longitude,
         D.location.lat, D.location.lng
       );
-      callback(dist <= D.location.radius);
+      callback(dist <= D.location.radius, dist <= D.location.radius ? null : 'outofrange');
     },
-    () => callback(false),
+    (err) => {
+      const code = err.code; // 1=권한거부 2=위치불가 3=타임아웃
+      callback(false, code===1?'denied': code===2?'unavailable': 'timeout');
+    },
     { timeout: 8000, maximumAge: 30000 }
   );
 }
