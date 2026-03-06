@@ -1727,13 +1727,13 @@ function renderGridS() {
       if(isMyResv && canCancel){
         const cancellable = i===8 || canCancelReserv(S.day, S.time, S.weekOffset);
         btnHtml = cancellable
-          ? '<button class="resv-btn resv-cancel" data-idx="'+i+'">예약 취소</button>'
+          ? '<button class="resv-btn resv-cancel" onclick="event.stopPropagation();toggleReservation('+i+')">예약 취소</button>'
           : '<button class="resv-btn" style="background:rgba(0,0,0,0.06);border-color:#ccc;color:#aaa;cursor:not-allowed;" disabled>취소 불가</button>';
       }
     } else if(!sid){
       dispSt='empty'; label='빈자리';
       if(canReserve){
-        btnHtml = '<button class="resv-btn resv-add" data-idx="'+i+'">+ 예약하기</button>';
+        btnHtml = '<button class="resv-btn resv-add" onclick="event.stopPropagation();toggleReservation('+i+')">+ 예약하기</button>';
       }
     } else if(st==='present'){dispSt='present';label='출석 중';}
     else if(st==='noshow'){
@@ -1747,14 +1747,14 @@ function renderGridS() {
           if(isMyResv){
             const cancellable2 = i===8 || canCancelReserv(S.day, S.time, S.weekOffset);
             btnHtml = cancellable2
-              ? '<button class="resv-btn resv-cancel" data-idx="'+i+'">예약 취소</button>'
+              ? '<button class="resv-btn resv-cancel" onclick="event.stopPropagation();toggleReservation('+i+')">예약 취소</button>'
               : '<button class="resv-btn" style="background:rgba(0,0,0,0.06);border-color:#ccc;color:#aaa;cursor:not-allowed;" disabled>취소 불가</button>';
             badgeHtml='<div class="float-badge" style="background:#FF28A7;color:#fff;">내 예약</div>';
             dispSt='reserved-mine';
           } else if(resvSid){
             badgeHtml='<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>';
           } else {
-            btnHtml='<button class="resv-btn resv-add" data-idx="'+i+'">+ 예약하기</button>';
+            btnHtml='<button class="resv-btn resv-add" onclick="event.stopPropagation();toggleReservation('+i+')">+ 예약하기</button>';
           }
         }
       }
@@ -1814,14 +1814,6 @@ function renderGridS() {
 
     grid.appendChild(card);
   }
-
-  // 버튼 이벤트 — 매번 새 그리드이므로 once 없이 직접 등록
-  grid.onclick = function(e){
-    const btn = e.target.closest('.resv-btn');
-    if(!btn) return;
-    e.stopPropagation();
-    toggleReservation(parseInt(btn.dataset.idx));
-  };
 }
 
 // 예약 취소 가능 여부: 해당 세션 시작 1시간 전이면 불가
