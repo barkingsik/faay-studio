@@ -242,6 +242,15 @@
   .chip-checkout { border-color: var(--tag-border); color: var(--text2); }
   .chip-noshow { border-color: var(--title-red); color: var(--title-red); background: rgba(212,69,110,0.08); }
 
+  .noshow-reason-btn {
+    width:100%; padding:13px 16px; border-radius:12px;
+    border:1.5px solid var(--tag-border); background:rgba(255,255,255,0.7);
+    color:var(--text); font-size:14px; font-weight:600; cursor:pointer;
+    font-family:'Noto Sans KR',sans-serif; text-align:left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .noshow-reason-btn:active { background:rgba(212,69,110,0.1); border-color:var(--title-red); }
+
   /* ── STATS ── */
   .stats-bar { display: flex; gap: 12px; padding: 10px 20px; flex-wrap: wrap; }
   .stat { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
@@ -680,7 +689,7 @@
     <div class="my-seat-actions">
       <button class="action-chip chip-checkin" id="chip-ci" onclick="doCheckinWithGeo()">✅ 입실</button>
       <button class="action-chip chip-checkout" id="chip-co" onclick="doAction('checkout')">🚪 퇴실</button>
-      <button class="action-chip chip-noshow" id="chip-ns" onclick="doAction('noshow')">🚫 미사용</button>
+      <button class="action-chip chip-noshow" id="chip-ns" onclick="openNoshowModal()">🚫 미사용</button>
     </div>
   </div>
   <div style="margin:8px 20px 0;padding:10px 14px;background:rgba(90,80,144,0.07);border:1.5px solid rgba(90,80,144,0.18);border-radius:12px;font-size:12px;color:var(--text2);line-height:1.6;">
@@ -930,6 +939,34 @@
       </div>
     </div>
     <button class="btn-ghost" onclick="closeModal('modal-closed')">닫기</button>
+  </div>
+</div>
+
+<!-- Noshow reason modal -->
+<div class="modal-overlay" id="modal-noshow" onclick="closeModal('modal-noshow')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚫 미사용 처리</div>
+    <div style="margin:0 0 14px;padding:12px 14px;background:rgba(255,40,167,0.08);border:1.5px solid rgba(255,40,167,0.2);border-radius:12px;font-size:12px;color:#c0006a;line-height:1.7;font-weight:500;">
+      ⚠️ 선생님에게 문자로 먼저 상황 알린 후 미사용 처리 하세요.
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;">미사용 사유를 선택해주세요</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+      <button class="noshow-reason-btn" onclick="selectNoshowReason('병원/아픔')">🏥 병원/아픔</button>
+      <button class="noshow-reason-btn" onclick="selectNoshowReason('요일 변경')">🔄 요일 변경</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="noshow-reason-btn" id="noshow-etc-btn" onclick="toggleNoshowEtc()">📝 기타 ›</button>
+        <div id="noshow-etc-wrap" style="display:none;padding:0 2px;">
+          <div style="position:relative;">
+            <input id="noshow-etc-input" type="text" maxlength="10" placeholder="사유 입력 (10자 이하)"
+              style="width:100%;padding:10px 44px 10px 12px;border-radius:10px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.85);box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;">
+            <span id="noshow-etc-count" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text3);">0/10</span>
+          </div>
+          <button onclick="confirmNoshowEtc()" style="margin-top:8px;width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--body-purple);background:rgba(90,80,144,0.1);color:var(--body-purple);font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">확인</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn-ghost" onclick="closeModal('modal-noshow')">취소</button>
   </div>
 </div>
 
@@ -1501,7 +1538,38 @@ function renderBanner() {
   }
 }
 
-function doAction(action) {
+function openNoshowModal() {
+  // 기타 입력 초기화
+  const wrap = document.getElementById('noshow-etc-wrap');
+  const input = document.getElementById('noshow-etc-input');
+  const count = document.getElementById('noshow-etc-count');
+  if(wrap) wrap.style.display='none';
+  if(input) { input.value=''; input.oninput = () => { count.textContent = input.value.length+'/10'; }; }
+  if(count) count.textContent='0/10';
+  openModal('modal-noshow');
+}
+
+function toggleNoshowEtc() {
+  const wrap = document.getElementById('noshow-etc-wrap');
+  const isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  if(!isOpen) document.getElementById('noshow-etc-input').focus();
+}
+
+function confirmNoshowEtc() {
+  const input = document.getElementById('noshow-etc-input');
+  const val = input.value.trim();
+  if(!val){ showToast('사유를 입력해주세요'); return; }
+  closeModal('modal-noshow');
+  doAction('noshow', '기타: '+val);
+}
+
+function selectNoshowReason(reason) {
+  closeModal('modal-noshow');
+  doAction('noshow', reason);
+}
+
+function doAction(action, reason) {
   // 미사용은 날짜/위치 제한 없이 가능
   if(action !== 'noshow' && !isSelectedToday()){showToast('오늘만 변경할 수 있어요');return;}
   // 입실/퇴실은 위치 확인 필요, 미사용은 어디서든 가능
@@ -1516,9 +1584,9 @@ function doAction(action) {
   const t=D.dateTimes[dk][S.time][idx];
   if(action==='present') t.in=nowHM();
   else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); }
-  else if(action==='noshow') { t.in=null; t.out=null; }
+  else if(action==='noshow') { t.in=null; t.out=null; t.reason=reason||null; }
   persist(); renderBanner(); renderStatsS(); renderGridS();
-  const m={present:'✅ 체크인 완료! '+nowHM(),checkout:'🚪 퇴실 완료! '+nowHM(),noshow:'🚫 오늘 미사용으로 표시했어요'};
+  const m={present:'✅ 체크인 완료! '+nowHM(),checkout:'🚪 퇴실 완료! '+nowHM(),noshow:'🚫 미사용 처리됐어요'+(reason?' ('+reason+')':'')};
   showToast(m[action]);
 }
 
@@ -2932,12 +3000,15 @@ function renderAttCalDetail(y, m, d) {
       const resvS = resv[i] ? byId(resv[i]) : null;
       const tRec = (times[i]) || {};
       const timeStr = [tRec.in?'입실 '+tRec.in:'', tRec.out?'퇴실 '+tRec.out:''].filter(Boolean).join(' · ');
+      const reasonBadge2 = (st==='noshow' && tRec.reason)
+        ? ' <span style="font-size:9px;padding:1px 5px;background:rgba(212,69,110,0.1);color:#c0006a;border-radius:6px;font-weight:600;">'+tRec.reason+'</span>'
+        : '';
       let nameCell = s ? s.name : '';
       if(resvS && s) nameCell += ' <span style="color:#FF28A7;font-size:10px;">→ '+resvS.name+' 예약</span>';
       if(resvS && !s) nameCell = '<span style="color:#FF28A7;">'+resvS.name+' (예약)</span>';
       rows += '<tr>'+
         '<td style="color:var(--text3);font-size:10px;white-space:nowrap;padding:5px 4px;">'+slabel(i)+'</td>'+
-        '<td style="font-weight:600;padding:5px 4px;">'+nameCell+'</td>'+
+        '<td style="font-weight:600;padding:5px 4px;">'+nameCell+reasonBadge2+'</td>'+
         '<td style="padding:5px 4px;"><span style="font-size:10px;color:'+stColor[st]+';font-weight:700;">'+stLabel[st]+'</span></td>'+
         '<td style="font-size:9px;color:var(--teal);white-space:nowrap;padding:5px 4px;font-family:monospace;">'+timeStr+'</td>'+
         '</tr>';
@@ -3321,7 +3392,8 @@ function renderAttBody() {
       records.push({
         date: d, dateStr: month+'/'+d+' ('+dayName+')',
         dayName, slot, status,
-        timeIn: tRec.in||null, timeOut: tRec.out||null
+        timeIn: tRec.in||null, timeOut: tRec.out||null,
+        reason: tRec.reason||null
       });
     });
   }
@@ -3373,8 +3445,11 @@ function renderAttBody() {
       const usedStr = usedM > 0 ? fmtMin(usedM) : '—';
       const isPast28 = r.date <= cutoffDay;
       const rowStyle = isPast28 ? '' : 'opacity:0.45;';
+      const reasonBadge = (isAbsent && r.reason)
+        ? '<span style="font-size:9px;padding:1px 6px;background:rgba(212,69,110,0.1);color:#c0006a;border-radius:8px;margin-left:4px;font-weight:600;">'+r.reason+'</span>'
+        : '';
       return '<tr style="'+rowStyle+'">' +
-        '<td class="att-date">'+r.dateStr+'</td>' +
+        '<td class="att-date">'+r.dateStr+reasonBadge+'</td>' +
         '<td><span class="att-mark" style="'+mark.inCls+'">'+mark.in+'</span>'+((!isAbsent&&mark.inTime&&mark.inTime!=='—')?'<span class="att-time-small">'+mark.inTime+'</span>':'')+'</td>' +
         '<td><span class="att-mark" style="'+mark.outCls+'">'+mark.out+'</span>'+((!isAbsent&&mark.outTime&&mark.outTime!=='—')?'<span class="att-time-small">'+mark.outTime+'</span>':'')+'</td>' +
         '<td style="font-size:10px;color:var(--teal);font-family:monospace;">'+usedStr+'</td>' +
