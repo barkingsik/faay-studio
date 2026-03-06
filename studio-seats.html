@@ -2469,7 +2469,7 @@ function renderGridA() {
     const resvBadge = resvSid ? '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>' : '';
     const availBadge = isAvail&&sid&&!resvSid ? '<div class="float-badge badge-avail">사용가능</div>' : '';
     const card=document.createElement('div');
-    card.className='seat-card '+dispSt+(sid?' clickable':'');
+    card.className='seat-card '+dispSt+' clickable';
     card.innerHTML=
       '<div>'+
         '<div class="seat-num">'+slabel(i)+'</div>'+
@@ -2481,22 +2481,23 @@ function renderGridA() {
         '<div class="status-text">'+label+'</div>'+
       '</div>'+
       resvBadge+availBadge;
-    if(sid||resvSid) card.onclick=()=>openStatusModal(S.adminDay,S.adminTimeA,i);
+    card.onclick=()=>openStatusModal(S.adminDay,S.adminTimeA,i);
     grid.appendChild(card);
   }
 }
 
 function openStatusModal(day,time,idx) {
   S.statusTarget={day,time,idx};
-  const sid=D.schedule[day][time][idx];
-  const s=byId(sid);
   const adk=adminSelectedDateKey();
+  const sched=getSchedForDate(adk,day,time);
+  const sid=sched[idx];
+  const s=byId(sid);
   const {stat:_aStat,resv:_aResv}=getDateData(adk,time);
   const st=_aStat[idx];
   const resvSid=_aResv[idx];
   const stLabels={present:'출석 중',noshow:'미사용',checkout:'체크아웃',pending:'미확인'};
   document.getElementById('mst-title').textContent=(s?.name||'빈자리')+' · '+slabel(idx);
-  document.getElementById('mst-sub').textContent=day+'요일 '+(time==='am'?'오전':'오후')+(sid?' · 현재: '+(stLabels[st]||st):'');
+  document.getElementById('mst-sub').textContent=day+'요일 '+(time==='am'?'오전':'오후')+(sid?' · 현재: '+(stLabels[st]||st):'· 빈자리');
 
   // 퇴실 버튼: 출석 중일 때만 표시
   const checkoutWrap=document.getElementById('mst-checkout-wrap');
