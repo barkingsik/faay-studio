@@ -1125,6 +1125,8 @@ function load() {
   DB_REF.on('value', snapshot => {
     const remote = snapshot.val();
     if(remote) {
+      // 내가 직접 저장한 경우엔 재렌더 스킵 (버튼 이벤트 보호)
+      if(window._skipNextFirebase) { window._skipNextFirebase = false; return; }
       D = remote;
     }
     ensureDefaults();
@@ -1156,6 +1158,7 @@ function cleanUndefined(obj) {
 }
 
 function persist() {
+  window._skipNextFirebase = true;
   const clean = cleanUndefined(D);
   DB_REF.set(clean);
   try { localStorage.setItem('studio_v3', JSON.stringify(clean)); } catch(e){}
