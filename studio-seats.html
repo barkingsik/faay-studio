@@ -452,7 +452,7 @@
     border-top: 1px solid rgba(232,224,96,0.5);
     padding: 10px 20px 20px;
     display: flex; align-items: center; justify-content: space-between;
-    z-index: 100; backdrop-filter: blur(12px);
+    z-index: 100; backdrop-filter: blur(12px); height: 64px;
   }
   .bottom-user { font-size: 12px; color: var(--text2); }
   .bottom-user strong { color: var(--body-purple); font-weight: 700; }
@@ -467,7 +467,7 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  .student-screen { padding-bottom: 140px; }
+  .student-screen { padding-bottom: 200px; }
   /* ── CALENDAR ── */
   .cal-wrap { padding: 16px 20px 20px; }
   .cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
@@ -1131,7 +1131,7 @@ function load() {
     // 로그인 상태면 화면 갱신 (선택된 날짜/주 유지)
     if(S.role === 'student') {
       // S.day, S.weekOffset 보존한 채로 렌더
-      renderBanner(); renderStatsS(); renderGridS();
+      renderStatsS(); renderGridS(); renderBanner();
     }
     if(S.role === 'admin') {
       renderStudentList();
@@ -1394,7 +1394,7 @@ function isSelectedClosed() {
 // ════════════════════════════════════════
 // STUDENT SCREEN
 // ════════════════════════════════════════
-function renderStudent() { renderDaysS(); renderBanner(); renderStatsS(); renderGridS(); }
+function renderStudent() { renderDaysS(); renderStatsS(); renderGridS(); renderBanner(); }
 
 function renderDaysS() {
   const now=new Date();
@@ -1410,7 +1410,7 @@ function renderDaysS() {
   prevBtn.style.cssText='width:28px;height:28px;font-size:14px;flex-shrink:0;';
   prevBtn.disabled = S.weekOffset<=0;
   prevBtn.style.opacity = S.weekOffset<=0 ? '0.3' : '1';
-  prevBtn.onclick=()=>{ if(S.weekOffset>0){S.weekOffset--;renderDaysS();renderBanner();renderStatsS();renderGridS();} };
+  prevBtn.onclick=()=>{ if(S.weekOffset>0){S.weekOffset--;renderDaysS();renderStatsS();renderGridS();renderBanner();} };
 
   const weekLabel=document.createElement('div');
   const mon=getWeekMonday(S.weekOffset);
@@ -1425,7 +1425,7 @@ function renderDaysS() {
   nextBtn.style.cssText='width:28px;height:28px;font-size:14px;flex-shrink:0;';
   nextBtn.disabled = S.weekOffset>=2;
   nextBtn.style.opacity = S.weekOffset>=2 ? '0.3' : '1';
-  nextBtn.onclick=()=>{ if(S.weekOffset<2){S.weekOffset++;renderDaysS();renderBanner();renderStatsS();renderGridS();} };
+  nextBtn.onclick=()=>{ if(S.weekOffset<2){S.weekOffset++;renderDaysS();renderStatsS();renderGridS();renderBanner();} };
 
   weekBar.appendChild(prevBtn); weekBar.appendChild(weekLabel); weekBar.appendChild(nextBtn);
   container.appendChild(weekBar);
@@ -1449,7 +1449,7 @@ function renderDaysS() {
       // active 클래스만 업데이트 (스크롤 유지)
       btnRow.querySelectorAll('.day-btn').forEach(btn=>btn.classList.remove('active'));
       b.classList.add('active');
-      renderBanner();renderStatsS();renderGridS();
+      renderStatsS();renderGridS();renderBanner();
     };
     btnRow.appendChild(b);
   });
@@ -1460,7 +1460,7 @@ function setTimeS(t) {
   S.time=t;
   document.getElementById('stab-am').classList.toggle('active',t==='am');
   document.getElementById('stab-pm').classList.toggle('active',t==='pm');
-  renderBanner(); renderStatsS(); renderGridS();
+  renderStatsS(); renderGridS(); renderBanner();
 }
 
 function myIdx() {
@@ -1551,8 +1551,38 @@ function renderBanner() {
         if(guide) showToast(guide, 5000);
         setTimeout(()=>{ ciBtn.textContent = '✅ 입실'; coBtn.textContent = '🚪 퇴실'; }, 5000);
       }
-      renderGridS(); // 잠금 배지 업데이트
+        // renderGridS 재호출 제거 — 버튼 이벤트 리스너가 사라지는 문제 방지
+        // 잠금 배지만 직접 업데이트
+        updateLockBadge();
     });
+  }
+}
+
+function updateLockBadge() {
+  const mi = myIdx();
+  if(mi === -1) return;
+  const today = isSelectedToday();
+  if(!today || !D.location) return;
+  const isLocked = S.geoAllowed === false;
+  const cards = document.querySelectorAll('#grid-s .seat-card');
+  if(!cards[mi]) return;
+  const card = cards[mi];
+  // 기존 잠금 오버레이 제거
+  card.querySelectorAll('.lock-overlay').forEach(el => el.remove());
+  // badge-mine 업데이트
+  let badgeEl = card.querySelector('.badge-mine');
+  if(!badgeEl) {
+    badgeEl = document.createElement('div');
+    badgeEl.className = 'float-badge badge-mine';
+    badgeEl.textContent = '내 자리';
+    card.appendChild(badgeEl);
+  }
+  if(isLocked) {
+    const lo = document.createElement('div');
+    lo.className = 'lock-overlay';
+    lo.style.cssText = 'position:absolute;inset:0;border-radius:var(--card-radius);background:rgba(255,255,255,0.18);z-index:2;pointer-events:none;';
+    lo.innerHTML = '<div style="position:absolute;bottom:0;left:0;right:0;border-radius:0 0 var(--card-radius) var(--card-radius);background:#e8e060;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 0;"><span style="font-size:13px;">🔒</span><span style="font-size:10px;color:#5a4800;font-weight:700;font-family:Noto Sans KR,sans-serif;">작업실에서 입실 가능</span></div>';
+    card.appendChild(lo);
   }
 }
 
@@ -1603,7 +1633,7 @@ function doAction(action, reason) {
   if(action==='present') t.in=nowHM();
   else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); }
   else if(action==='noshow') { t.in=null; t.out=null; t.reason=reason||null; }
-  persist(); renderBanner(); renderStatsS(); renderGridS();
+  persist(); renderStatsS(); renderGridS(); renderBanner();
   const m={present:'✅ 체크인 완료! '+nowHM(),checkout:'🚪 퇴실 완료! '+nowHM(),noshow:'🚫 미사용 처리됐어요'+(reason?' ('+reason+')':'')};
   showToast(m[action]);
 }
