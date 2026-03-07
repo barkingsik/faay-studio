@@ -1125,16 +1125,10 @@ function load() {
   DB_REF.on('value', snapshot => {
     const remote = snapshot.val();
     if(remote) {
-      // 내가 직접 저장한 경우엔 재렌더 스킵 (버튼 이벤트 보호)
-      if(window._skipNextFirebase) { window._skipNextFirebase = false; return; }
       D = remote;
     }
     ensureDefaults();
-    // 로그인 상태면 화면 갱신 (선택된 날짜/주 유지)
-    if(S.role === 'student') {
-      // S.day, S.weekOffset 보존한 채로 렌더
-      renderStatsS(); renderGridS(); renderBanner();
-    }
+    // 관리자만 실시간 갱신 (학생 화면은 자체 렌더로 충분 — Firebase 재렌더 시 버튼 이벤트 소멸 방지)
     if(S.role === 'admin') {
       renderStudentList();
       renderAdminSeats();
@@ -1158,7 +1152,6 @@ function cleanUndefined(obj) {
 }
 
 function persist() {
-  window._skipNextFirebase = true;
   const clean = cleanUndefined(D);
   DB_REF.set(clean);
   try { localStorage.setItem('studio_v3', JSON.stringify(clean)); } catch(e){}
