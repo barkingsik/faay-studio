@@ -1726,7 +1726,7 @@ function renderGridS() {
         ih+='</div>';
         if(myResvs.length) ih+='<div class="float-badge" style="background:#FF28A7;color:#fff;">내 예약</div>';
         card.innerHTML=ih;
-        card.addEventListener('click',openAuxModal);
+        card.dataset.auxSeat='1';
       }
       grid.appendChild(card);
       continue;
@@ -1807,6 +1807,10 @@ function renderGridS() {
 
   // 이벤트 위임: Firebase 재렌더 후에도 살아있음
   grid.onclick = function(e) {
+    // 보조좌석 카드 클릭
+    const auxCard = e.target.closest('[data-aux-seat]');
+    if(auxCard) { openAuxModal(); return; }
+    // 예약/취소 버튼 클릭
     const btn = e.target.closest('[data-resv-idx]');
     if(!btn || btn.disabled) return;
     e.stopPropagation();
@@ -1814,7 +1818,7 @@ function renderGridS() {
   };
 }
 
-function renderBanner() { _renderBanner(); }
+
 function canCancelReserv(dayName, slot, weekOffset) {
   const selDate = dayToDate(dayName, weekOffset);
   const now = new Date();
