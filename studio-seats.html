@@ -1683,16 +1683,15 @@ function renderGridS() {
 
   grid.innerHTML='';
 
-  function makeBtn(type, idx) {
+  function makeBtn(type, seatIdx) {
     const b=document.createElement('button');
+    b.dataset.resvIdx = seatIdx;
     if(type==='add'){
       b.className='resv-btn resv-add';
       b.textContent='+ 예약하기';
-      b.addEventListener('click',function(e){e.stopPropagation();toggleReservation(idx);});
     } else if(type==='cancel'){
       b.className='resv-btn resv-cancel';
       b.textContent='예약 취소';
-      b.addEventListener('click',function(e){e.stopPropagation();toggleReservation(idx);});
     } else {
       b.className='resv-btn';
       b.setAttribute('style','background:rgba(0,0,0,0.06);border-color:#ccc;color:#aaa;cursor:not-allowed;');
@@ -1809,8 +1808,15 @@ function renderGridS() {
     if(badgeHtml) card.insertAdjacentHTML('beforeend',badgeHtml);
     grid.appendChild(card);
   }
-}
 
+  // 이벤트 위임: Firebase 재렌더 후에도 살아있음
+  grid.onclick = function(e) {
+    const btn = e.target.closest('[data-resv-idx]');
+    if(!btn || btn.disabled) return;
+    e.stopPropagation();
+    toggleReservation(parseInt(btn.dataset.resvIdx));
+  };
+}
 function canCancelReserv(dayName, slot, weekOffset) {
   const selDate = dayToDate(dayName, weekOffset);
   const now = new Date();
