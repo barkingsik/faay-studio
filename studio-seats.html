@@ -1665,8 +1665,7 @@ function renderGridS() {
   const today=isSelectedToday();
   const selDate=dayToDate(S.day,S.weekOffset); selDate.setHours(0,0,0,0);
   const nowDate=new Date(); nowDate.setHours(0,0,0,0);
-  const iAssigned=getSchedForDate(selectedDateKey(),S.day,S.time).includes(S.studentId);
-  const canReserve=selDate>=nowDate&&!iAssigned;
+  const canReserve=selDate>=nowDate;
   const canCancel=selDate>=nowDate;
 
   if(isSelectedClosed()){
