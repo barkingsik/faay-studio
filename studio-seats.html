@@ -1813,6 +1813,8 @@ function renderGridS() {
     toggleReservation(parseInt(btn.dataset.resvIdx));
   };
 }
+
+function renderBanner() { _renderBanner(); }
 function canCancelReserv(dayName, slot, weekOffset) {
   const selDate = dayToDate(dayName, weekOffset);
   const now = new Date();
