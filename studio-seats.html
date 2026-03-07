@@ -1978,7 +1978,9 @@ function toggleReservation(idx) {
     showToast('이미 다른 학생이 예약했어요');
   } else {
     // 같은 날짜+슬롯에 이미 예약했는지 확인
-    const alreadyResv = (D.dateReservations[dk]?.[S.time]||[]).some(id=>id===S.studentId);
+    const _resvSlot = D.dateReservations[dk]?.[S.time] || {};
+    const _resvArr = Array.isArray(_resvSlot) ? _resvSlot : Object.values(_resvSlot);
+    const alreadyResv = _resvArr.some(id=>id===S.studentId);
     if(alreadyResv){
       showToast('⚠️ 이미 이 시간대에 예약한 자리가 있어요');
       return;
