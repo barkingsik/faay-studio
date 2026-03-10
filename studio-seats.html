@@ -1633,7 +1633,7 @@ function doAction(action, reason) {
   dd.stat[idx]=action;
   if(!dd.times[idx]) { dd.times[idx]={in:null,out:null}; D.dateTimes[dk][S.time][idx]={in:null,out:null}; }
   const t=D.dateTimes[dk][S.time][idx];
-  if(action==='present') t.in=nowHM();
+  if(action==='present') { t.in=nowHM(); if(S.time==='am') syncPmCheckin(dk, idx, t.in); }
   else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); }
   else if(action==='noshow') { t.in=null; t.out=null; t.reason=reason||null; }
   persist(); renderStatsS(); renderGridS(); renderBanner();
@@ -2689,17 +2689,44 @@ function openMyAttModal() {
 }
 
 // 오전 연동 퇴실 헬퍼: 오후 퇴실 시 같은 학생의 오전 슬롯도 checkout 처리
+function findSeatIdx(dk, slot, sid) {
+  const {sched, resv} = getDateData(dk, slot);
+  const schedIdx = sched.indexOf(sid);
+  if(schedIdx !== -1) return schedIdx;
+  const resvArr = Array.isArray(resv) ? resv : Object.assign(Array(9).fill(null), resv);
+  return resvArr.indexOf(sid);
+}
+
 function syncAmCheckout(dk, seatIdx, outTime) {
-  const amSched = getDateData(dk, 'am').sched;
-  const sid = getDateData(dk, 'pm').sched[seatIdx]; // 오후 퇴실 학생
+  const sid = (() => {
+    const pm = getDateData(dk, 'pm');
+    const resvArr = Array.isArray(pm.resv) ? pm.resv : Object.assign(Array(9).fill(null), pm.resv);
+    return pm.sched[seatIdx] || resvArr[seatIdx];
+  })();
   if(!sid) return;
-  const amIdx = amSched.indexOf(sid);
-  if(amIdx === -1) return; // 오전 배정 없음
+  const amIdx = findSeatIdx(dk, 'am', sid);
+  if(amIdx === -1) return;
   const amStat = getDateData(dk, 'am').stat;
-  if(amStat[amIdx] !== 'present') return; // 오전이 출석 중이 아니면 패스
+  if(amStat[amIdx] !== 'present') return;
   amStat[amIdx] = 'checkout';
   if(!D.dateTimes[dk]['am'][amIdx]) D.dateTimes[dk]['am'][amIdx] = {in:null, out:null};
   D.dateTimes[dk]['am'][amIdx].out = outTime;
+}
+
+function syncPmCheckin(dk, seatIdx, inTime) {
+  const sid = (() => {
+    const am = getDateData(dk, 'am');
+    const resvArr = Array.isArray(am.resv) ? am.resv : Object.assign(Array(9).fill(null), am.resv);
+    return am.sched[seatIdx] || resvArr[seatIdx];
+  })();
+  if(!sid) return;
+  const pmIdx = findSeatIdx(dk, 'pm', sid);
+  if(pmIdx === -1) return;
+  const pmStat = getDateData(dk, 'pm').stat;
+  if(pmStat[pmIdx] && pmStat[pmIdx] !== 'present') return;
+  pmStat[pmIdx] = 'present';
+  if(!D.dateTimes[dk]['pm'][pmIdx]) D.dateTimes[dk]['pm'][pmIdx] = {in:null, out:null};
+  D.dateTimes[dk]['pm'][pmIdx].in = inTime;
 }
 
 function adminCheckout() {
