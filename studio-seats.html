@@ -1462,7 +1462,13 @@ function setTimeS(t) {
 function myIdx() {
   const dk = selectedDateKey();
   const sched = getSchedForDate(dk, S.day, S.time);
-  return sched.indexOf(S.studentId);
+  const schedIdx = sched.indexOf(S.studentId);
+  if(schedIdx !== -1) return schedIdx;
+  // 예약(resv)된 자리도 내 자리로 인식
+  const resv = getDateData(dk, S.time).resv;
+  const resvArr = Array.isArray(resv) ? resv : Object.values(Object.assign(Array(9).fill(null), resv));
+  const resvIdx = resvArr.indexOf(S.studentId);
+  return resvIdx;
 }
 
 function renderBanner() {
