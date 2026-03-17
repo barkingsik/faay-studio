@@ -1465,10 +1465,11 @@ function myIdx() {
   const sched = getSchedForDate(dk, S.day, S.time);
   const schedIdx = sched.indexOf(S.studentId);
   if(schedIdx !== -1) return schedIdx;
-  // 예약(resv)된 자리도 내 자리로 인식
-  const resv = getDateData(dk, S.time).resv;
+  // 예약(resv)된 자리도 내 자리로 인식 — 단, 해당 자리에 다른 학생이 출석 중이면 제외
+  const {resv, sched: sc, stat} = getDateData(dk, S.time);
   const resvArr = Array.isArray(resv) ? resv : Object.values(Object.assign(Array(9).fill(null), resv));
   const resvIdx = resvArr.indexOf(S.studentId);
+  if(resvIdx !== -1 && sc[resvIdx] && stat[resvIdx] === 'present') return -1;
   return resvIdx;
 }
 
