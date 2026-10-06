@@ -1685,8 +1685,13 @@ function renderStatsS() {
     const st=stat[i];
     if(st==='present') present++;
     else if(st==='noshow'){
-      noshow++;
-      if(resv[i]) reserved++; // 미사용 중 예약된 것
+      if(sid===S.studentId){
+        noshow++;               // 내 자리의 미사용은 그대로 미사용
+      } else if(resv[i]) {
+        reserved++;             // 다른 학생 자리가 미사용 + 예약됨
+      } else {
+        unset++;                // 다른 학생의 미사용은 학생에게 '빈자리'로 보임
+      }
     } else noshow++;
   });
   document.getElementById('stats-s').innerHTML=
@@ -1743,7 +1748,8 @@ function renderGridS() {
       const myResvs=auxResvs.filter(r=>r.sid===S.studentId);
       const otherResvs=auxResvs.filter(r=>r.sid!==S.studentId);
       const card=document.createElement('div');
-      if(sid8){
+      // 다른 학생이 미사용 처리한 보조좌석은 학생에게 빈 좌석처럼 보이게 함
+      if(sid8 && !(st8==='noshow' && sid8!==S.studentId)){
         let ds='empty';
         if(st8==='present') ds='present';
         else if(st8==='noshow') ds='noshow';
