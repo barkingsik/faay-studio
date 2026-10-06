@@ -683,6 +683,8 @@
     <button class="time-tab" id="stab-pm" onclick="setTimeS('pm')">오후 <span class="time-range">15:00 – 20:00</span></button>
   </div>
 
+  <div id="usage-warn" style="display:none"></div>
+
   <div id="my-banner" class="my-seat-banner" style="display:none">
     <div class="my-seat-label" id="my-label">내 좌석</div>
     <div class="my-seat-name" id="my-seatname"></div>
@@ -827,6 +829,7 @@
         style="flex:1;padding:9px 14px;border-radius:20px;border:1.5px solid var(--tag-border);font-size:13px;background:rgba(255,255,255,0.8);font-family:'Noto Sans KR',sans-serif;">
       <button class="btn-primary" style="white-space:nowrap;padding:9px 14px;" onclick="openStudentModal(null)">+ 추가</button>
     </div>
+    <div id="usage-summary"></div>
     <div class="student-list" id="student-list"></div>
   </div>
 
@@ -1239,6 +1242,19 @@ function getSchedForDate(dateKey, day, slot) {
   return D.schedule[day]?.[slot] || toArr(null, SEATS, null);
 }
 
+// 화면에 보여주기만 할 때 쓰는 읽기 전용 버전 (getDateData는 호출만 해도 빈 데이터를 만들어 저장함)
+function peekDateData(dk, slot) {
+  const p = dk.split('-').map(Number);
+  const dayName = DAYS[(new Date(p[0], p[1]-1, p[2]).getDay() + 6) % 7];
+  const cp = v => Array.isArray(v) ? v.slice() : v;
+  return {
+    sched: getSchedForDate(dk, dayName, slot),
+    stat:  toArr(cp(D.dateStatus?.[dk]?.[slot]), SEATS, 'pending'),
+    times: D.dateTimes?.[dk]?.[slot] || {},
+    resv:  toArr(cp(D.dateReservations?.[dk]?.[slot]), SEATS, null)
+  };
+}
+
 function getDateData(dateKey, slot) {
   const _parts = dateKey.split('-').map(Number);
   const _d = new Date(_parts[0], _parts[1]-1, _parts[2]);
@@ -1421,7 +1437,40 @@ function isSelectedClosed() {
 // ════════════════════════════════════════
 // STUDENT SCREEN
 // ════════════════════════════════════════
-function renderStudent() { renderDaysS(); renderStatsS(); renderGridS(); renderBanner(); }
+function renderStudent() { renderDaysS(); renderStatsS(); renderGridS(); renderBanner(); renderUsageWarning(); }
+
+// ── 좌석 사용률 경고 ──
+// 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
+// (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
+// 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
+const WARN_DAY = 15;
+const WARN_RATE = 50;
+function renderUsageWarning() {
+  const el = document.getElementById('usage-warn');
+  if(!el) return;
+  el.style.display = 'none'; el.innerHTML = '';
+  if(S.role !== 'student' || !S.studentId) return;
+  const now = new Date();
+  const testMode = /[?&]warntest/.test(location.search);
+  if(now.getDate() !== WARN_DAY && !testMode) return;
+  const stu = byId(S.studentId);
+  if(!stu) return;
+  const st = calcAttStats(stu, now.getFullYear(), now.getMonth()+1);
+  if(!st.records.some(r => !r.viaResv)) return;          // 이번 달 배정 좌석이 없으면 안내하지 않음
+  if(st.rawRate > WARN_RATE && !testMode) return;        // 50%를 넘으면 안내하지 않음
+  const pct = st.rate;
+  el.style.cssText = 'margin:10px 20px 0;padding:12px 14px;background:rgba(212,69,110,0.08);border:1.5px solid rgba(212,69,110,0.45);border-radius:12px;font-family:Noto Sans KR,sans-serif;';
+  el.innerHTML =
+    '<div style="font-size:12px;font-weight:700;color:var(--title-red);margin-bottom:6px;">⚠️ 좌석 사용률 안내</div>' +
+    '<div style="font-size:12px;color:var(--text);line-height:1.6;">'+(now.getMonth()+1)+'/'+now.getDate()+' 기준, 이번 달 좌석 사용률이 현재 <b style="font-size:15px;color:var(--title-red);">'+pct+'%</b>예요.</div>' +
+    '<div style="position:relative;height:8px;border-radius:6px;background:rgba(90,80,144,0.15);margin:10px 0 4px;">' +
+      '<div style="height:100%;width:'+Math.min(100,pct)+'%;border-radius:6px;background:var(--title-red);"></div>' +
+      '<div style="position:absolute;left:'+WARN_RATE+'%;top:-3px;width:2px;height:14px;background:var(--body-purple);"></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);">' +
+      '<span>'+fmtMin(st.totalUsedMin)+' 사용 (60시간 기준)</span><span>기준 '+WARN_RATE+'%</span></div>' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;">남은 기간 좌석 이용을 부탁드려요.</div>';
+}
 
 function renderDaysS() {
   const now=new Date();
@@ -1661,11 +1710,17 @@ function doAction(action, reason) {
   const idx=myIdx(); if(idx===-1)return;
   const dk=selectedDateKey();
   const dd=getDateData(dk,S.time);
+  // 내 자리를 미사용 처리한 뒤 다른 학생이 예약했다면, 원래 주인은 그 자리를 쓸 수 없음
+  // (예약이 취소되면 다시 쓸 수 있어요)
+  const resvOwner=dd.resv[idx];
+  if(dd.sched[idx]===S.studentId && resvOwner && resvOwner!==S.studentId){
+    showToast('다른 학생이 예약한 자리라 사용할 수 없어요'); return;
+  }
   dd.stat[idx]=action;
   if(!dd.times[idx]) { dd.times[idx]={in:null,out:null}; D.dateTimes[dk][S.time][idx]={in:null,out:null}; }
   const t=D.dateTimes[dk][S.time][idx];
   if(action==='present') { t.in=nowHM(); if(S.time==='am') syncPmCheckin(dk, idx, t.in); }
-  else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); }
+  else if(action==='checkout') { t.out=nowHM(); if(S.time==='pm') syncAmCheckout(dk, idx, t.out); else syncPmCheckout(dk, idx, t.out); }
   else if(action==='noshow') { t.in=null; t.out=null; t.reason=reason||null; }
   persist(); renderStatsS(); renderGridS(); renderBanner();
   const m={present:'✅ 체크인 완료! '+nowHM(),checkout:'🚪 퇴실 완료! '+nowHM(),noshow:'🚫 미사용 처리됐어요'+(reason?' ('+reason+')':'')};
@@ -2075,27 +2130,82 @@ function showAdminTab(n) {
 }
 
 // ── Students tab ──
+// 관리자용: 학생 한 명의 이번 달 사용량 + '15일 기준 50% 이하' 여부
+function getUsageInfo(stu) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth()+1;
+  const cur = calcAttStats(stu, y, m);
+  const hasSeat = cur.records.some(r => !r.viaResv);
+  let low = false, snapRate = null;
+  if(hasSeat && now.getDate() >= WARN_DAY){
+    const snap = calcAttStats(stu, y, m, WARN_DAY);          // 15일까지의 사용률
+    if(snap.rateRecords.some(r => !r.viaResv)){               // 15일까지 배정된 날이 있어야 대상
+      snapRate = snap.rate;
+      low = snap.rawRate <= WARN_RATE;
+    }
+  }
+  return {rate:cur.rate, raw:cur.rawRate, usedMin:cur.totalUsedMin, hasSeat, low, snapRate};
+}
+
+function toggleLowOnly() { S.lowOnly = !S.lowOnly; renderStudentList(); }
+
 function renderStudentList() {
   if(S.role==='admin' && ensureStudentColors()) persist();
   const list=document.getElementById('student-list');
+  const summary=document.getElementById('usage-summary');
+  if(summary) summary.innerHTML='';
   const query=(document.getElementById('student-search')?.value||'').trim().toLowerCase();
   if(!D.students.length){
     list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:14px;">등록된 학생이 없어요</div>';
     return;
   }
-  // 최신 추가 순 (배열 역순), 검색 필터 적용
-  const filtered=[...D.students].reverse().filter(s=>!query||s.name.toLowerCase().includes(query));
+  // 학생별 이번 달 사용량 계산
+  const usage={};
+  D.students.forEach(st=>{ usage[st.id]=getUsageInfo(st); });
+  const nowD=new Date();
+  const pastWarnDay = nowD.getDate() >= WARN_DAY;
+  const lowCount = D.students.filter(st=>usage[st.id].low).length;
+
+  // 15일 이후: 15일 기준 50% 이하 학생 요약 + 모아보기 버튼
+  if(summary && pastWarnDay){
+    summary.innerHTML = lowCount
+      ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px;padding:9px 14px;border-radius:12px;background:rgba(212,69,110,0.08);border:1.5px solid rgba(212,69,110,0.4);font-size:12px;color:var(--text);font-family:Noto Sans KR,sans-serif;">'+
+          '<span>⚠️ '+WARN_DAY+'일 기준 사용률 '+WARN_RATE+'% 이하 <b style="color:var(--title-red);">'+lowCount+'명</b></span>'+
+          '<button onclick="toggleLowOnly()" style="flex-shrink:0;font-size:11px;padding:5px 10px;border-radius:14px;border:1.5px solid var(--title-red);background:'+(S.lowOnly?'var(--title-red)':'rgba(255,255,255,0.6)')+';color:'+(S.lowOnly?'#fff':'var(--title-red)')+';cursor:pointer;font-weight:700;font-family:Noto Sans KR,sans-serif;">'+(S.lowOnly?'전체 보기':WARN_RATE+'% 이하만 보기')+'</button>'+
+        '</div>'
+      : '<div style="margin:0 0 10px;padding:9px 14px;border-radius:12px;background:rgba(58,122,90,0.08);border:1.5px solid rgba(58,122,90,0.35);font-size:12px;color:var(--text2);font-family:Noto Sans KR,sans-serif;">'+WARN_DAY+'일 기준 사용률 '+WARN_RATE+'% 이하 학생이 없어요</div>';
+  }
+
+  // 최신 추가 순 (배열 역순), 검색 필터 + (선택 시) 50% 이하만 보기
+  const filtered=[...D.students].reverse()
+    .filter(s=>!query||s.name.toLowerCase().includes(query))
+    .filter(s=>!(S.lowOnly && pastWarnDay) || usage[s.id].low);
   if(!filtered.length){
     list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:14px;">검색 결과가 없어요</div>';
     return;
   }
   list.innerHTML='';
   filtered.forEach(s=>{
-    const seats=[];
-    DAYS.forEach(d=>['am','pm'].forEach(t=>{
-      const idx=D.schedule[d][t].indexOf(s.id);
-      if(idx!==-1)seats.push(`${d} ${t==='am'?'오전':'오후'} ${slabel(idx)}`);
-    }));
+    const u=usage[s.id];
+    // 요일/좌석 목록 대신 이번 달 사용량 막대그래프
+    let usageHtml;
+    if(!u.hasSeat){
+      usageHtml='<div class="student-seats" style="color:var(--text3);">이번 달 배정 없음</div>';
+    } else {
+      const col=u.low?'var(--title-red)':'var(--body-purple)';
+      usageHtml=
+        '<div style="margin-top:7px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--text2);margin-bottom:4px;">'+
+            '<span>이번 달 <b style="font-size:14px;color:'+col+';">'+u.rate+'%</b></span>'+
+            '<span>'+fmtMin(u.usedMin)+' / 60시간</span>'+
+          '</div>'+
+          '<div style="position:relative;height:8px;border-radius:6px;background:rgba(90,80,144,0.15);">'+
+            '<div style="height:100%;width:'+Math.min(100,u.raw)+'%;border-radius:6px;background:'+col+';"></div>'+
+            (pastWarnDay?'<div style="position:absolute;left:'+WARN_RATE+'%;top:-3px;width:2px;height:14px;background:var(--body-purple);opacity:0.55;"></div>':'')+
+          '</div>'+
+          (u.low?'<div style="display:inline-block;margin-top:6px;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(212,69,110,0.12);color:var(--title-red);font-weight:700;">'+WARN_DAY+'일 기준 '+u.snapRate+'% · '+WARN_RATE+'% 이하</div>':'')+
+        '</div>';
+    }
     const item=document.createElement('div');
     item.className='student-item';
     item.style.cursor='pointer';
@@ -2104,7 +2214,7 @@ function renderStudentList() {
       <div class="student-info">
         <div class="student-name-row">${s.name}</div>
         <div class="student-phone">${s.phone}</div>
-        <div class="student-seats">${seats.length?seats.join(' · '):'배정 없음'}</div>
+        ${usageHtml}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
         <button class="student-edit-btn" onclick="event.stopPropagation();openStudentModal('${s.id}')">수정</button>
@@ -2745,6 +2855,7 @@ function adminStatus(newSt) {
   if(newSt==='present'){
     if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
     D.dateTimes[adk][time][idx].in=nowHM();
+    if(time==='am') syncPmCheckin(adk, idx, D.dateTimes[adk][time][idx].in);
   }
   if(newSt==='noshow') D.dateTimes[adk][time][idx]=null;
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
@@ -2781,6 +2892,29 @@ function syncAmCheckout(dk, seatIdx, outTime) {
   D.dateTimes[dk]['am'][amIdx].out = outTime;
 }
 
+// 오전 탭에서 퇴실했을 때: 같은 학생의 오후(출석 중)도 같이 퇴실 처리
+function syncPmCheckout(dk, seatIdx, outTime) {
+  const sid = (() => {
+    const am = getDateData(dk, 'am');
+    const resvArr = Array.isArray(am.resv) ? am.resv : Object.assign(Array(9).fill(null), am.resv);
+    return am.sched[seatIdx] || resvArr[seatIdx];
+  })();
+  if(!sid) return;
+  const pmIdx = findSeatIdx(dk, 'pm', sid);
+  if(pmIdx === -1) return;
+  const pmStat = getDateData(dk, 'pm').stat;
+  if(pmStat[pmIdx] !== 'present') return;
+  if(hhmm(outTime) < 15*60) {
+    // 오후가 시작되기 전에 퇴실 → 오후는 쓰지 않은 것이므로 '미사용' 처리 (자리도 비워짐)
+    pmStat[pmIdx] = 'noshow';
+    D.dateTimes[dk]['pm'][pmIdx] = {in:null, out:null, reason:'오전 퇴실'};
+    return;
+  }
+  pmStat[pmIdx] = 'checkout';
+  if(!D.dateTimes[dk]['pm'][pmIdx]) D.dateTimes[dk]['pm'][pmIdx] = {in:null, out:null};
+  D.dateTimes[dk]['pm'][pmIdx].out = outTime;
+}
+
 function syncPmCheckin(dk, seatIdx, inTime) {
   const sid = (() => {
     const am = getDateData(dk, 'am');
@@ -2791,7 +2925,8 @@ function syncPmCheckin(dk, seatIdx, inTime) {
   const pmIdx = findSeatIdx(dk, 'pm', sid);
   if(pmIdx === -1) return;
   const pmStat = getDateData(dk, 'pm').stat;
-  if(pmStat[pmIdx] && pmStat[pmIdx] !== 'present') return;
+  // 오후가 '미확인'일 때만 자동 출석 처리 (이미 출석/미사용/퇴실이면 건드리지 않음)
+  if(pmStat[pmIdx] && pmStat[pmIdx] !== 'pending') return;
   pmStat[pmIdx] = 'present';
   if(!D.dateTimes[dk]['pm'][pmIdx]) D.dateTimes[dk]['pm'][pmIdx] = {in:null, out:null};
   D.dateTimes[dk]['pm'][pmIdx].in = inTime;
@@ -2805,7 +2940,7 @@ function adminCheckout() {
   if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
   const t=nowHM();
   D.dateTimes[adk][time][idx].out=t;
-  if(time==='pm') syncAmCheckout(adk, idx, t);
+  if(time==='pm') syncAmCheckout(adk, idx, t); else syncPmCheckout(adk, idx, t);
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('🚪 퇴실 처리됐어요');
 }
@@ -2819,7 +2954,7 @@ function adminCheckoutManual() {
   dd.stat[idx]='checkout';
   if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
   D.dateTimes[adk][time][idx].out=t;
-  if(time==='pm') syncAmCheckout(adk, idx, t);
+  if(time==='pm') syncAmCheckout(adk, idx, t); else syncPmCheckout(adk, idx, t);
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('🚪 '+t+' 퇴실 처리됐어요');
 }
@@ -2833,6 +2968,7 @@ function adminCheckinManual() {
   dd.stat[idx]='present';
   if(!D.dateTimes[adk][time][idx]) D.dateTimes[adk][time][idx]={in:null,out:null};
   D.dateTimes[adk][time][idx].in=t;
+  if(time==='am') syncPmCheckin(adk, idx, t);
   persist(); closeModal('modal-status'); renderStatsA(); renderGridA();
   showToast('✅ '+t+' 입실 처리됐어요');
 }
@@ -2984,7 +3120,8 @@ function getDayAttSummary(y, m, d) {
         // 빈자리 예약
         if(resv[i]) {
           const s = byId(resv[i]);
-          summary[slot].push({ name: s?s.name:'?', type:'resv', seat:i });
+          const rst = stat[i];
+          summary[slot].push({ name: s?s.name:'?', type:(rst==='present'||rst==='checkout')?rst:'resv', seat:i });
         }
         return;
       }
@@ -3038,7 +3175,10 @@ function renderAttCal() {
         const stat=dd2.stat;
         const resv=dd2.resv;
         sched.forEach((sid,i)=>{
-          if(!sid){ if(resv[i]) resvCnt++; return; }
+          if(!sid){
+            if(resv[i]){ if(stat[i]==='present'||stat[i]==='checkout') presentCnt++; else resvCnt++; }
+            return;
+          }
           const st=stat[i]||'pending';
           if(st==='present'||st==='checkout') presentCnt++;
           else if(st==='noshow') noshowCnt++;
@@ -3132,7 +3272,7 @@ function renderAttCalDetail(y, m, d) {
     sched.forEach((sid, i) => {
       if(!sid && !resv[i]) return;
       const s = sid ? byId(sid) : null;
-      const st = sid ? (stat[i]||'pending') : 'resv';
+      const st = sid ? (stat[i]||'pending') : ((stat[i]==='present'||stat[i]==='checkout') ? stat[i] : 'resv');
       const resvS = resv[i] ? byId(resv[i]) : null;
       const tRec = (times[i]) || {};
       const timeStr = [tRec.in?'입실 '+tRec.in:'', tRec.out?'퇴실 '+tRec.out:''].filter(Boolean).join(' · ');
@@ -3379,8 +3519,12 @@ function calcUsedMin(timeIn, timeOut, slot) {
   if(inMin===null) return 0;
   // 퇴실 기록 없으면: 오전 15:00, 오후 20:00 기준
   const defaultOut = slot==='am' ? 15*60 : 20*60;
-  const out = outMin !== null ? outMin : defaultOut;
-  return Math.max(0, out - inMin);
+  let out = outMin !== null ? outMin : defaultOut;
+  // 오전·오후를 이어서 쓴 경우 시간이 두 번 합산되지 않도록 경계(15:00)에서 나눔
+  let start = inMin;
+  if(slot==='pm') start = Math.max(inMin, 15*60);   // 오후는 15:00부터만 계산
+  if(slot==='am') out = Math.min(out, 15*60);       // 오전은 15:00까지만 계산
+  return Math.max(0, out - start);
 }
 
 function attMark(action, timeIn, timeOut, slot) {
@@ -3498,9 +3642,8 @@ function renderAttDrilldown() {
   }
 }
 
-function renderAttBody() {
-  const s = byId(attSid);
-  const [year, month] = attMonth.split('-').map(Number);
+// 한 학생의 한 달 출석 통계 계산 (출석기록 화면과 사용률 경고가 같은 계산을 쓰도록 분리)
+function calcAttStats(s, year, month, forceCutoff) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const dayNames = ['일','월','화','수','목','금','토'];
   const now = new Date();
@@ -3510,24 +3653,45 @@ function renderAttBody() {
   // 이 달의 28일이 지났는지
   const snapshot28 = !isCurrentMonth || today >= 28;
   // 출석률 계산 기준일: 28일 또는 오늘
-  const cutoffDay = snapshot28 ? 28 : today;
+  const cutoffDay = forceCutoff || (snapshot28 ? 28 : today);
 
+  const nowMin = now.getHours()*60 + now.getMinutes();
   let records = [];
   for(let d=1; d<=daysInMonth; d++){
     const dateObj = new Date(year, month-1, d);
     const dayName = dayNames[dateObj.getDay()];
-    if(!DAYS.includes(dayName)) continue;
     ['am','pm'].forEach(slot => {
       const dkR = year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-      const sched = D.schedule[dayName]?.[slot] || [];
-      const idx = sched.indexOf(s.id);
+      // 그 날짜에 실제 적용된 배치표(월별 배치 포함)와 예약을 기준으로 찾음
+      const dd = peekDateData(dkR, slot);
+      let idx = dd.sched.indexOf(s.id), viaResv = false;
+      if(idx === -1){ idx = dd.resv.indexOf(s.id); viaResv = (idx !== -1); }
       if(idx === -1) return;
-      const ddR = getDateData(dkR, slot);
-      const status = ddR.stat[idx] || 'pending';
-      const tRec = (D.dateTimes[dkR]?.[slot]?.[idx]) || {};
+
+      const tRec = dd.times[idx] || {};
+      let status = dd.stat[idx] || 'pending';
+
+      if(viaResv){
+        // 예약해서 쓴 자리: 입실 전이면 '예약만 함'으로 표시 (결석으로 세지 않음)
+        if(status==='noshow' || status==='pending') status = 'resvPending';
+      } else if(dd.resv[idx] && dd.resv[idx] !== s.id && status !== 'pending'){
+        // 내 자리를 다른 학생이 예약해서 쓴 날: 내 출석이 아니라 미사용으로 기록
+        status = 'noshow';
+      }
+
+      // 휴무일은 기록에서 제외 (출석한 기록이 있으면 그대로 보여줌)
+      if(isClosed(year, month-1, d, slot) && status!=='present' && status!=='checkout') return;
+
+      // 아직 끝나지 않은 시간대(오늘 진행 전/중, 앞으로의 날짜)는 결석으로 세지 않음
+      if(status==='pending'){
+        const slotEnd = slot==='am' ? 15*60 : 20*60;
+        const notEnded = isCurrentMonth && (d > today || (d === today && nowMin < slotEnd));
+        if(notEnded) status = 'upcoming';
+      }
+
       records.push({
         date: d, dateStr: month+'/'+d+' ('+dayName+')',
-        dayName, slot, status,
+        dayName, slot, status, viaResv,
         timeIn: tRec.in||null, timeOut: tRec.out||null,
         reason: tRec.reason||null
       });
@@ -3539,6 +3703,7 @@ function renderAttBody() {
   let totalUsedMin = 0, presentDays = 0, lateDays = 0, noshowDays = 0;
 
   rateRecords.forEach(r => {
+    if(r.status==='upcoming' || r.status==='resvPending') return; // 아직 안 끝났거나 예약만 한 경우는 세지 않음
     if(r.status==='noshow'||r.status==='pending'){ noshowDays++; return; }
     presentDays++;
     const mark = attMark(r.status, r.timeIn, r.timeOut, r.slot);
@@ -3548,6 +3713,15 @@ function renderAttBody() {
 
   const usedHours = totalUsedMin / 60;
   const rate = Math.min(100, Math.round(usedHours / TOTAL_HOURS * 100));
+  const rawRate = usedHours / TOTAL_HOURS * 100;
+  return {records, rateRecords, totalUsedMin, presentDays, lateDays, noshowDays, usedHours, rate, rawRate, snapshot28, cutoffDay, isCurrentMonth, today};
+}
+
+function renderAttBody() {
+  const s = byId(attSid);
+  const [year, month] = attMonth.split('-').map(Number);
+  const {records, totalUsedMin, lateDays, noshowDays, rate, snapshot28, cutoffDay, today} = calcAttStats(s, year, month);
+
   const rateLabel = snapshot28
     ? month+'월 출석률 (28일 기준)'
     : month+'월 출석률 ('+today+'일 현재)';
@@ -3584,8 +3758,11 @@ function renderAttBody() {
       const reasonBadge = (isAbsent && r.reason)
         ? '<span style="font-size:9px;padding:1px 6px;background:rgba(212,69,110,0.1);color:#c0006a;border-radius:8px;margin-left:4px;font-weight:600;">'+r.reason+'</span>'
         : '';
+      const resvBadge = r.viaResv
+        ? '<span style="font-size:9px;padding:1px 6px;background:rgba(255,40,167,0.12);color:#FF28A7;border-radius:8px;margin-left:4px;font-weight:600;">'+(r.status==='resvPending'?'예약·입실 안 함':'예약')+'</span>'
+        : '';
       return '<tr style="'+rowStyle+'">' +
-        '<td class="att-date">'+r.dateStr+reasonBadge+'</td>' +
+        '<td class="att-date">'+r.dateStr+reasonBadge+resvBadge+'</td>' +
         '<td><span class="att-mark" style="'+mark.inCls+'">'+mark.in+'</span>'+((!isAbsent&&mark.inTime&&mark.inTime!=='—')?'<span class="att-time-small">'+mark.inTime+'</span>':'')+'</td>' +
         '<td><span class="att-mark" style="'+mark.outCls+'">'+mark.out+'</span>'+((!isAbsent&&mark.outTime&&mark.outTime!=='—')?'<span class="att-time-small">'+mark.outTime+'</span>':'')+'</td>' +
         '<td style="font-size:10px;color:var(--teal);font-family:monospace;">'+usedStr+'</td>' +
