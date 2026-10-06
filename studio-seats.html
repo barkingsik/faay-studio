@@ -2113,16 +2113,44 @@ function saveStudent() {
 function deleteStudent() {
   if(!S.editSid)return;
   if(!confirm('학생을 삭제하면 배치표에서도 제거됩니다. 계속할까요?'))return;
-  DAYS.forEach(d=>['am','pm'].forEach(t=>{
-    D.schedule[d][t]=D.schedule[d][t].map(id=>id===S.editSid?null:id);
-  }));
-  // 날짜 기반 데이터에서도 제거
-  Object.keys(D.dateReservations||{}).forEach(dk=>{
-    ['am','pm'].forEach(t=>{
-      if(D.dateReservations[dk]?.[t]) D.dateReservations[dk][t]=D.dateReservations[dk][t].map(id=>id===S.editSid?null:id);
+  const sid = S.editSid;
+
+  // 학생 ID를 비우는 도우미
+  // (Firebase는 배열을 객체로 바꿔 저장할 때가 있어서, 배열/객체 둘 다 안전하게 처리)
+  const clearId = (list) => {
+    if(!list || typeof list !== 'object') return;
+    Object.keys(list).forEach(k => { if(list[k] === sid) list[k] = null; });
+  };
+
+  // 배치표 정리 중 오류가 나도 학생 삭제는 반드시 끝까지 진행되도록 감쌈
+  try {
+    // 요일별 배치표 / 예약
+    DAYS.forEach(d => ['am','pm'].forEach(t => {
+      clearId(D.schedule?.[d]?.[t]);
+      clearId(D.reservations?.[d]?.[t]);
+    }));
+    // 날짜별 예약
+    Object.values(D.dateReservations || {}).forEach(day => {
+      if(!day) return;
+      ['am','pm'].forEach(t => clearId(day[t]));
     });
-  });
-  D.students=D.students.filter(s=>s.id!==S.editSid);
+    // 기간별 배치 스냅샷
+    Object.values(D.scheduleSnapshots || {}).forEach(snap => {
+      if(!snap || typeof snap !== 'object') return;
+      DAYS.forEach(d => ['am','pm'].forEach(t => clearId(snap[d]?.[t])));
+    });
+    // 보조좌석 예약
+    Object.keys(D.auxReservations || {}).forEach(dk => {
+      ['am','pm'].forEach(t => {
+        const arr = D.auxReservations[dk]?.[t];
+        if(arr) D.auxReservations[dk][t] = Object.values(arr).filter(r => r && r.sid !== sid);
+      });
+    });
+  } catch(e) {
+    console.error('배치표 정리 중 오류 (학생 삭제는 계속 진행):', e);
+  }
+
+  D.students = D.students.filter(s => s.id !== sid);
   persist(); closeModal('modal-student'); renderStudentList(); showToast('🗑️ 삭제됐어요');
 }
 
