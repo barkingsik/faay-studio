@@ -3760,6 +3760,26 @@ function calcAttStats(s, year, month, forceCutoff) {
     });
   }
 
+  // 옛 버전(오전→오후 연동이 안 되던 시기)에 쌓인 기록 보정: 화면에서만 계산하고 저장된 데이터는 바꾸지 않아요
+  //  · 오후가 '입실 시각 없이 퇴실만' 기록된 경우 → 오전 입실 시각을 오후 입실로 봄
+  //  · 오후가 '미확인'인데 오전 퇴실이 15:15 이후인 경우 → 오후에도 있었던 것으로 봄 (15분 이내는 늦게 나간 것으로 봄)
+  {
+    const _am = {};
+    records.forEach(r => { if(r.slot==='am') _am[r.date] = r; });
+    records.forEach(r => {
+      if(r.slot !== 'pm') return;
+      const am = _am[r.date];
+      if(!am || !(am.status==='present' || am.status==='checkout') || !am.timeIn) return;
+      const amIn = hhmm(am.timeIn), amOut = hhmm(am.timeOut);
+      if(amIn === null || amIn >= 15*60) return;
+      if(r.status==='pending' && amOut !== null && amOut >= 15*60 + 15){
+        r.status = 'checkout'; r.timeIn = am.timeIn; r.timeOut = am.timeOut; r.inferred = true;
+      } else if((r.status==='present' || r.status==='checkout') && !r.timeIn){
+        r.timeIn = am.timeIn; r.inferred = true;
+      }
+    });
+  }
+
   // 같은 날 반대편 시간대도 출석(입실/퇴실)이면 15:00에서 시간을 나눔
   const _byKey = {};
   records.forEach(r => { _byKey[r.date+r.slot] = r; });
@@ -3828,11 +3848,14 @@ function renderAttBody() {
       const reasonBadge = (isAbsent && r.reason)
         ? '<span style="font-size:9px;padding:1px 6px;background:rgba(212,69,110,0.1);color:#c0006a;border-radius:8px;margin-left:4px;font-weight:600;">'+r.reason+'</span>'
         : '';
+      const infBadge = r.inferred
+        ? '<span style="font-size:9px;padding:1px 6px;background:rgba(90,80,144,0.12);color:var(--text2);border-radius:8px;margin-left:4px;font-weight:600;">자동 보정</span>'
+        : '';
       const resvBadge = r.viaResv
         ? '<span style="font-size:9px;padding:1px 6px;background:rgba(255,40,167,0.12);color:#FF28A7;border-radius:8px;margin-left:4px;font-weight:600;">'+(r.status==='resvPending'?'예약·입실 안 함':'예약')+'</span>'
         : '';
       return '<tr style="'+rowStyle+'">' +
-        '<td class="att-date">'+r.dateStr+reasonBadge+resvBadge+'</td>' +
+        '<td class="att-date">'+r.dateStr+reasonBadge+resvBadge+infBadge+'</td>' +
         '<td><span class="att-mark" style="'+mark.inCls+'">'+mark.in+'</span>'+((!isAbsent&&mark.inTime&&mark.inTime!=='—')?'<span class="att-time-small">'+mark.inTime+'</span>':'')+'</td>' +
         '<td><span class="att-mark" style="'+mark.outCls+'">'+mark.out+'</span>'+((!isAbsent&&mark.outTime&&mark.outTime!=='—')?'<span class="att-time-small">'+mark.outTime+'</span>':'')+'</td>' +
         '<td style="font-size:10px;color:var(--teal);font-family:monospace;">'+usedStr+'</td>' +
