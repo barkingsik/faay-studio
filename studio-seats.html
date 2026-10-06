@@ -1273,6 +1273,36 @@ function adminSelectedDateKey() {
 // UTILS
 // ════════════════════════════════════════
 function byId(id) { return D.students.find(s=>s.id===id)||null; }
+
+// ── 학생별 이름 색상 ──
+// 글자가 잘 보이는 12가지 색. 학생마다 한 번 정해서 저장해 두면 계속 같은 색으로 보여요.
+const NAME_COLORS = ['#d4456e','#2f6fdb','#2e8b57','#d9822b','#8e4fc9','#0f8b9a',
+                     '#c0392b','#7a8a1f','#8a5a2b','#5b5fdd','#b8860b','#6a7b8c'];
+
+// 아직 가장 적게 쓰인 색을 골라줘요 (색이 겹치지 않게)
+function nextStudentColor() {
+  const count = NAME_COLORS.map(()=>0);
+  (D.students||[]).forEach(s=>{ const i=NAME_COLORS.indexOf(s.color); if(i>=0) count[i]++; });
+  return NAME_COLORS[count.indexOf(Math.min(...count))];
+}
+
+// 색이 없는 학생에게 색을 정해줘요. 새로 정해진 게 있으면 true
+function ensureStudentColors() {
+  let changed=false;
+  (D.students||[]).forEach(s=>{
+    if(!s.color){ s.color=nextStudentColor(); changed=true; }
+  });
+  return changed;
+}
+
+// 학생 id로 이름 색 찾기 (색이 아직 없으면 id로 임시 색을 정해서 항상 같은 색이 나오게 함)
+function studentColor(sid) {
+  if(!sid) return 'inherit';
+  const st=byId(sid);
+  if(st && st.color) return st.color;
+  let h=0; for(const ch of String(sid)) h=(h*31+ch.charCodeAt(0))>>>0;
+  return NAME_COLORS[h%NAME_COLORS.length];
+}
 function slabel(i) { return i===8 ? '보조좌석' : `SEAT ${String(i+1).padStart(2,'00')}`; }
 function todayD() { return ['일','월','화','수','목','금','토'][new Date().getDay()]; }
 function isToday(d) { return d===todayD(); }
@@ -1719,7 +1749,7 @@ function renderGridS() {
         else if(st8==='noshow') ds='noshow';
         card.className='seat-card '+ds;
         const tr8=(D.dateTimes?.[dk2]?.[S.time]?.[8])||{};
-        let ih='<div><div class="seat-num">보조좌석</div><div class="seat-name">'+(student8?student8.name:'')+'</div>';
+        let ih='<div><div class="seat-num">보조좌석</div><div class="seat-name" style="color:'+studentColor(sid8)+'">'+(student8?student8.name:'')+'</div>';
         if(tr8.in&&st8==='present') ih+='<div style="font-size:10px;color:var(--teal);font-family:monospace;margin-top:2px;">입실 '+tr8.in+'</div>';
         ih+='</div><div class="seat-status"><div class="status-dot"></div><div class="status-text">'+(st8==='present'?'출석 중':st8==='noshow'?'미사용':st8==='checkout'?'체크아웃':'미확인')+'</div></div>';
         card.innerHTML=ih;
@@ -1798,7 +1828,7 @@ function renderGridS() {
 
     const topDiv=document.createElement('div');
     topDiv.innerHTML='<div class="seat-num">'+slabel(i)+'</div>'+
-      (displayName?'<div class="seat-name">'+displayName+'</div>':'')+
+      (displayName?'<div class="seat-name" style="color:'+studentColor((sid&&!(st==='noshow'&&!isMine))?sid:resvSid)+'">'+displayName+'</div>':'')+
       (timeStr?'<div style="font-size:9px;color:var(--teal);font-family:monospace;margin-top:3px;line-height:1.4;">'+timeStr+'</div>':'');
 
     const botDiv=document.createElement('div');
@@ -2040,6 +2070,7 @@ function showAdminTab(n) {
 
 // ── Students tab ──
 function renderStudentList() {
+  if(S.role==='admin' && ensureStudentColors()) persist();
   const list=document.getElementById('student-list');
   const query=(document.getElementById('student-search')?.value||'').trim().toLowerCase();
   if(!D.students.length){
@@ -2063,7 +2094,7 @@ function renderStudentList() {
     item.className='student-item';
     item.style.cursor='pointer';
     item.innerHTML=`
-      <div class="student-avatar">${s.name[0]}</div>
+      <div class="student-avatar" style="color:${studentColor(s.id)};border-color:${studentColor(s.id)};background:${studentColor(s.id)}22;">${s.name[0]}</div>
       <div class="student-info">
         <div class="student-name-row">${s.name}</div>
         <div class="student-phone">${s.phone}</div>
@@ -2103,7 +2134,7 @@ function saveStudent() {
     D.students.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
     showToast('✅ 수정 완료');
   } else {
-    D.students.push({id:`s_${Date.now()}`,name,phone,pw});
+    D.students.push({id:`s_${Date.now()}`,name,phone,pw,color:nextStudentColor()});
     D.students.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
     showToast('✅ 학생 추가 완료');
   }
@@ -2163,6 +2194,7 @@ function setAdminTime(t) {
 }
 
 function renderAdminSeats() {
+  if(S.role==='admin' && ensureStudentColors()) persist();
   const t=S.adminTime;
   const now=new Date();
   const monthKey = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
@@ -2184,7 +2216,8 @@ function renderAdminSeats() {
       const cell=document.createElement('div');
       const _row=getEditSched(d,t); const sid=_row[i]||null, student=sid?byId(sid):null;
       cell.className='admin-cell'+(student?' has-s':'');
-      cell.innerHTML=student?`<div class="cell-name">${student.name}</div>`:`<div class="cell-name" style="color:var(--text3);font-size:12px;">+</div>`;
+      if(student){ const c=studentColor(student.id); cell.style.borderColor=c; cell.style.background=c+'22'; }
+      cell.innerHTML=student?`<div class="cell-name" style="color:${studentColor(student.id)}">${student.name}</div>`:`<div class="cell-name" style="color:var(--text3);font-size:12px;">+</div>`;
       cell.dataset.day=d; cell.dataset.time=t; cell.dataset.idx=i;
       cell.onclick=function(){ openAssignModal(this.dataset.day, this.dataset.time, parseInt(this.dataset.idx)); };
       row.appendChild(cell);
@@ -2555,7 +2588,7 @@ function renderGridA() {
     const isAvail=sid&&dispSt!=='present';
     const tRecA=(sid&&D.dateTimes[dk]?.[S.adminTimeA]?.[i])||{};
     const timeStrA=[tRecA.in?'입실 '+tRecA.in:'', tRecA.out?'퇴실 '+tRecA.out:''].filter(Boolean).join(' ');
-    let nameHtml = student?.name||'';
+    let nameHtml = student ? '<span style="color:'+studentColor(student.id)+'">'+student.name+'</span>' : '';
     if(resvStudent && student) nameHtml += ' <span style="font-size:10px;color:#FF28A7;">→ '+resvStudent.name+' 예약</span>';
     if(resvStudent && !student) nameHtml = '<span style="color:#FF28A7;font-weight:700;">'+resvStudent.name+' (예약)</span>';
     const resvBadge = resvSid ? '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>' : '';
