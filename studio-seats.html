@@ -1467,6 +1467,7 @@ function renderUsageBar() {
 // 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
 // (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
 // 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
+const APP_VERSION = '2026.10.07-f';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
 const WARN_DAY = 15;
 const WARN_RATE = 50;
 function renderUsageWarning() {
@@ -3573,13 +3574,13 @@ function hhmm(str){
 // clampToSlot: 같은 날 반대편 시간대(오전↔오후)도 출석으로 기록된 경우에만 true
 //   → 이어서 쓴 시간이 오전·오후에 두 번 합산되지 않게 15:00에서 나눠요.
 //   반대편 기록이 없으면(예: 오후만 배정된 학생이 일찍 온 경우) 실제 머문 시간을 모두 계산해요.
+const NO_CHECKOUT_MIN = 120;   // 퇴실을 안 누른 경우 사용 시간(분)
 function calcUsedMin(timeIn, timeOut, slot, clampToSlot) {
   const inMin  = hhmm(timeIn);
   const outMin = hhmm(timeOut);
   if(inMin===null) return 0;
-  // 퇴실 기록 없으면: 오전 15:00, 오후 20:00 기준
-  const defaultOut = slot==='am' ? 15*60 : 20*60;
-  let out = outMin !== null ? outMin : defaultOut;
+  // 퇴실 기록이 없으면: 입실 시각부터 NO_CHECKOUT_MIN(2시간) 사용한 것으로 계산
+  let out = outMin !== null ? outMin : inMin + NO_CHECKOUT_MIN;
   // 오전·오후를 이어서 쓴 경우 시간이 두 번 합산되지 않도록 경계(15:00)에서 나눔
   let start = inMin;
   if(clampToSlot){
@@ -3780,6 +3781,20 @@ function calcAttStats(s, year, month, forceCutoff) {
     });
   }
 
+  // 오전에 퇴실 기록이 없는데, 같은 날 오후에 이어서 쓴 기록(오후 입실이 15:00 이전)과 퇴실이 있으면 그 퇴실을 오전에도 적용
+  {
+    const _pm = {};
+    records.forEach(r => { if(r.slot==='pm') _pm[r.date] = r; });
+    records.forEach(r => {
+      if(r.slot !== 'am' || !r.timeIn || r.timeOut) return;
+      if(!(r.status==='present' || r.status==='checkout')) return;
+      const pm = _pm[r.date];
+      if(pm && pm.status==='checkout' && pm.timeOut && pm.timeIn && hhmm(pm.timeIn) < 15*60){
+        r.timeOut = pm.timeOut; r.inferred = true;
+      }
+    });
+  }
+
   // 같은 날 반대편 시간대도 출석(입실/퇴실)이면 15:00에서 시간을 나눔
   const _byKey = {};
   records.forEach(r => { _byKey[r.date+r.slot] = r; });
@@ -3826,7 +3841,7 @@ function renderAttBody() {
 
   // 출석률 기준 설명
   const infoEl = document.getElementById('att-rate-info');
-  if(infoEl) infoEl.textContent = '60시간 = 100% 기준 · '+cutoffDay+'일까지 누적 '+fmtMin(totalUsedMin)+' 사용';
+  if(infoEl) infoEl.textContent = '60시간 = 100% 기준 · '+cutoffDay+'일까지 누적 '+fmtMin(totalUsedMin)+' 사용 · 화면 버전 '+APP_VERSION;
 
   if(!records.length){
     document.getElementById('att-body').innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">이 달에 배정된 좌석이 없어요</div>';
@@ -3842,7 +3857,18 @@ function renderAttBody() {
       const mark = attMark(r.status, r.timeIn, r.timeOut, r.slot);
       const isAbsent = r.status==='noshow'||r.status==='pending';
       const usedM = isAbsent ? 0 : calcUsedMin(r.timeIn, r.timeOut, r.slot, r.clamp);
-      const usedStr = usedM > 0 ? fmtMin(usedM) : '—';
+      let usedStr = usedM > 0 ? fmtMin(usedM) : '—';
+      // 이어서 쓴 날은 오전은 15:00까지, 오후는 15:00부터 나눠서 계산했다는 설명을 붙임
+      if(usedM > 0 && !isAbsent && r.timeIn && !r.timeOut){
+        // 오전·오후를 이어서 쓴 날은 두 칸을 합쳐서 2시간이므로 문구를 구분함
+        usedStr += '<span class="att-time-small">퇴실 미입력 · '+(r.clamp?'합쳐 ':'')+(NO_CHECKOUT_MIN/60)+'시간 계산</span>';
+      } else if(usedM > 0 && r.clamp){
+        const _i = hhmm(r.timeIn), _o = hhmm(r.timeOut);
+        let _note = '';
+        if(r.slot==='am' && _o !== null && _o > 15*60) _note = '15:00까지';
+        if(r.slot==='pm' && _i !== null && _i < 15*60) _note = '15:00부터';
+        if(_note) usedStr += '<span class="att-time-small">'+_note+'</span>';
+      }
       const isPast28 = r.date <= cutoffDay;
       const rowStyle = isPast28 ? '' : 'opacity:0.45;';
       const reasonBadge = (isAbsent && r.reason)
