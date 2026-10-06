@@ -3570,7 +3570,10 @@ function hhmm(str){
 }
 
 // 실제 사용 시간(분) 계산
-function calcUsedMin(timeIn, timeOut, slot) {
+// clampToSlot: 같은 날 반대편 시간대(오전↔오후)도 출석으로 기록된 경우에만 true
+//   → 이어서 쓴 시간이 오전·오후에 두 번 합산되지 않게 15:00에서 나눠요.
+//   반대편 기록이 없으면(예: 오후만 배정된 학생이 일찍 온 경우) 실제 머문 시간을 모두 계산해요.
+function calcUsedMin(timeIn, timeOut, slot, clampToSlot) {
   const inMin  = hhmm(timeIn);
   const outMin = hhmm(timeOut);
   if(inMin===null) return 0;
@@ -3579,8 +3582,10 @@ function calcUsedMin(timeIn, timeOut, slot) {
   let out = outMin !== null ? outMin : defaultOut;
   // 오전·오후를 이어서 쓴 경우 시간이 두 번 합산되지 않도록 경계(15:00)에서 나눔
   let start = inMin;
-  if(slot==='pm') start = Math.max(inMin, 15*60);   // 오후는 15:00부터만 계산
-  if(slot==='am') out = Math.min(out, 15*60);       // 오전은 15:00까지만 계산
+  if(clampToSlot){
+    if(slot==='pm') start = Math.max(inMin, 15*60);   // 오후는 15:00부터만 계산
+    if(slot==='am') out = Math.min(out, 15*60);       // 오전은 15:00까지만 계산
+  }
   return Math.max(0, out - start);
 }
 
@@ -3755,6 +3760,14 @@ function calcAttStats(s, year, month, forceCutoff) {
     });
   }
 
+  // 같은 날 반대편 시간대도 출석(입실/퇴실)이면 15:00에서 시간을 나눔
+  const _byKey = {};
+  records.forEach(r => { _byKey[r.date+r.slot] = r; });
+  records.forEach(r => {
+    const o = _byKey[r.date + (r.slot==='am' ? 'pm' : 'am')];
+    r.clamp = !!o && (o.status==='present' || o.status==='checkout');
+  });
+
   // 28일(또는 오늘)까지만 출석률 계산
   const rateRecords = records.filter(r => r.date <= cutoffDay);
   let totalUsedMin = 0, presentDays = 0, lateDays = 0, noshowDays = 0;
@@ -3765,7 +3778,7 @@ function calcAttStats(s, year, month, forceCutoff) {
     presentDays++;
     const mark = attMark(r.status, r.timeIn, r.timeOut, r.slot);
     if(mark.in==='△') lateDays++;
-    totalUsedMin += calcUsedMin(r.timeIn, r.timeOut, r.slot);
+    totalUsedMin += calcUsedMin(r.timeIn, r.timeOut, r.slot, r.clamp);
   });
 
   const usedHours = totalUsedMin / 60;
@@ -3808,7 +3821,7 @@ function renderAttBody() {
     let rows = recs.map(r => {
       const mark = attMark(r.status, r.timeIn, r.timeOut, r.slot);
       const isAbsent = r.status==='noshow'||r.status==='pending';
-      const usedM = isAbsent ? 0 : calcUsedMin(r.timeIn, r.timeOut, r.slot);
+      const usedM = isAbsent ? 0 : calcUsedMin(r.timeIn, r.timeOut, r.slot, r.clamp);
       const usedStr = usedM > 0 ? fmtMin(usedM) : '—';
       const isPast28 = r.date <= cutoffDay;
       const rowStyle = isPast28 ? '' : 'opacity:0.45;';
