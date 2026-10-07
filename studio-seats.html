@@ -1467,7 +1467,7 @@ function renderUsageBar() {
 // 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
 // (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
 // 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
-const APP_VERSION = '2026.10.07-h';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
+const APP_VERSION = '2026.10.07-i';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
 const WARN_DAY = 15;
 const WARN_RATE = 50;
 function renderUsageWarning() {
@@ -2713,8 +2713,13 @@ function renderStatsA() {
   }
   const {sched,stat}=getDateData(dk,S.adminTimeA);
   let present=0,noshow=0,avail=0,unset=0;
+  const resvA=getDateData(dk,S.adminTimeA).resv;
   sched.forEach((sid,i)=>{
-    if(!sid){unset++;return;}
+    if(!sid){
+      // 배치 없이 예약만 있고 입실한 자리는 출석으로 집계
+      if(resvA[i] && stat[i]==='present') present++; else unset++;
+      return;
+    }
     if(stat[i]==='present')present++;
     else{noshow++;avail++;}
   });
@@ -2750,7 +2755,10 @@ function renderGridA() {
     const resvStudent=resvSid?byId(resvSid):null;
     let dispSt,label;
     if(!sid){
-      if(resvSid){dispSt='empty';label='예약중';}
+      // 배치 없이 예약만 있는 자리: 예약한 학생의 입실/퇴실 상태를 그대로 보여줌
+      if(resvSid && stat[i]==='present'){dispSt='present';label='출석 중';}
+      else if(resvSid && stat[i]==='checkout'){dispSt='noshow';label='체크아웃';}
+      else if(resvSid){dispSt='empty';label='예약중';}
       else{dispSt='empty';label='';}
     }
     else if(st==='present'){dispSt='present';label='출석 중';}
@@ -2758,7 +2766,7 @@ function renderGridA() {
     else if(st==='checkout'){dispSt='noshow';label='체크아웃';}
     else{dispSt='empty';label='미확인';}
     const isAvail=sid&&dispSt!=='present';
-    const tRecA=(sid&&D.dateTimes[dk]?.[S.adminTimeA]?.[i])||{};
+    const tRecA=((sid||resvSid)&&D.dateTimes[dk]?.[S.adminTimeA]?.[i])||{};
     const timeStrA=[tRecA.in?'입실 '+tRecA.in:'', tRecA.out?'퇴실 '+tRecA.out:''].filter(Boolean).join(' ');
     let nameHtml = student ? '<span style="color:'+studentColor(student.id)+'">'+student.name+'</span>' : '';
     if(resvStudent && student) nameHtml += ' <span style="font-size:10px;color:#FF28A7;">→ '+resvStudent.name+' 예약</span>';
