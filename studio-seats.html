@@ -1060,8 +1060,7 @@
     <div class="modal-handle"></div>
     <div class="modal-title" id="attnote-title">사유 메모</div>
     <div class="modal-sub" id="attnote-sub"></div>
-    <div id="attnote-other" style="display:none;margin-bottom:10px;padding:9px 12px;border-radius:12px;background:rgba(255,255,255,0.55);border:1.5px solid var(--tag-border);font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;word-break:break-all;"></div>
-    <div style="font-size:11px;color:var(--text2);margin:0 0 4px;" id="attnote-label">내 메모</div>
+    <div style="font-size:11px;color:var(--text2);margin:0 0 4px;">학생과 관리자가 함께 보고 고칠 수 있어요</div>
     <textarea id="attnote-text" maxlength="200" rows="4" placeholder="예) 조퇴 - 병원 진료 / 결석 - 가족 행사" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1.5px solid var(--tag-border);background:rgba(255,255,255,0.8);font-size:14px;font-family:'Noto Sans KR',sans-serif;color:var(--text);resize:none;"></textarea>
     <div style="font-size:10px;color:var(--text3);text-align:right;margin:2px 0 10px;"><span id="attnote-count">0</span>/200</div>
     <button class="btn-primary" onclick="saveAttNote()">저장</button>
@@ -1483,7 +1482,7 @@ function renderUsageBar() {
 // 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
 // (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
 // 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
-const APP_VERSION = '2026.10.07-j';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
+const APP_VERSION = '2026.10.07-k';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
 const WARN_DAY = 15;
 const WARN_RATE = 50;
 function renderUsageWarning() {
@@ -3862,46 +3861,38 @@ function calcAttStats(s, year, month, forceCutoff) {
 }
 
 // ── 출석 사유 메모 ──
-// 저장 위치: D.attNotes[학생id][날짜키] = { s: 학생 메모, a: 관리자 메모 }
-// 학생은 자기 메모만, 관리자는 관리자 메모만 쓸 수 있고, 서로의 메모는 볼 수 있어요.
+// 저장 위치: D.attNotes[학생id][날짜키] = { t: 메모 }  (학생과 관리자가 같은 메모를 함께 보고 고쳐요)
+// 예전 형식 { s: 학생 메모, a: 관리자 메모 }로 저장된 메모는 읽을 때 하나로 합쳐서 보여줘요.
 let attNoteKey = null;
 function escNote(t) {
   return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function getAttNote(sid, dk) {
   const n = D.attNotes && D.attNotes[sid] && D.attNotes[sid][dk];
-  return {s: (n && n.s) || '', a: (n && n.a) || ''};
+  if(!n) return '';
+  if(typeof n.t === 'string') return n.t;
+  return [n.s, n.a].filter(Boolean).join(' / ');
 }
 function openAttNote(dk) {
   attNoteKey = dk;
-  const isAdmin = S.role === 'admin';
   const stu = byId(attSid);
-  const n = getAttNote(attSid, dk);
   const p = dk.split('-').map(Number);
   const dn = ['일','월','화','수','목','금','토'][new Date(p[0],p[1]-1,p[2]).getDay()];
-  document.getElementById('attnote-title').textContent = (p[1])+'/'+p[2]+' ('+dn+') 사유 메모';
+  document.getElementById('attnote-title').textContent = p[1]+'/'+p[2]+' ('+dn+') 사유 메모';
   document.getElementById('attnote-sub').textContent = stu ? stu.name : '';
-  const other = document.getElementById('attnote-other');
-  const otherText = isAdmin ? n.s : n.a;
-  other.style.display = otherText ? '' : 'none';
-  other.textContent = otherText ? (isAdmin ? '학생 메모: ' : '관리자 메모: ') + otherText : '';
-  document.getElementById('attnote-label').textContent = isAdmin ? '관리자 메모' : '내 메모 (학생)';
   const ta = document.getElementById('attnote-text');
-  ta.value = isAdmin ? n.a : n.s;
+  ta.value = getAttNote(attSid, dk);
   document.getElementById('attnote-count').textContent = ta.value.length;
   ta.oninput = () => { document.getElementById('attnote-count').textContent = ta.value.length; };
   openModal('modal-attnote');
 }
 function writeAttNote(text) {
-  const isAdmin = S.role === 'admin';
-  if(!isAdmin && attSid !== S.studentId) { showToast('본인 기록에만 메모할 수 있어요'); return false; }
+  // 학생은 자기 기록에만 쓸 수 있고, 관리자는 모든 학생 기록에 쓸 수 있어요
+  if(S.role !== 'admin' && attSid !== S.studentId) { showToast('본인 기록에만 메모할 수 있어요'); return false; }
   if(!D.attNotes) D.attNotes = {};
   if(!D.attNotes[attSid]) D.attNotes[attSid] = {};
-  const cur = D.attNotes[attSid][attNoteKey] || {};
-  const next = {s: cur.s || '', a: cur.a || ''};
-  next[isAdmin ? 'a' : 's'] = text;
-  if(!next.s && !next.a) delete D.attNotes[attSid][attNoteKey];
-  else D.attNotes[attSid][attNoteKey] = next;
+  if(text) D.attNotes[attSid][attNoteKey] = {t: text};
+  else delete D.attNotes[attSid][attNoteKey];
   persist();
   closeModal('modal-attnote');
   renderAttBody();
@@ -4011,11 +4002,10 @@ function renderAttBody() {
 
     // 사유 칸: 학생/관리자 메모 미리보기 (누르면 입력창)
     const nt = getAttNote(attSid, day.dk);
-    const clamp = 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;';
-    let noteCell = '';
-    if(nt.s) noteCell += '<span style="'+clamp+'font-size:10px;color:var(--text);line-height:1.35;text-align:left;"><b style="color:var(--teal);">학생</b> '+escNote(nt.s)+'</span>';
-    if(nt.a) noteCell += '<span style="'+clamp+'font-size:10px;color:var(--text);line-height:1.35;text-align:left;margin-top:2px;"><b style="color:#c0006a;">관리</b> '+escNote(nt.a)+'</span>';
-    if(!noteCell) noteCell = '<span style="font-size:15px;color:var(--text3);">＋</span>';
+    const clamp = 'display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;';
+    const noteCell = nt
+      ? '<span style="'+clamp+'font-size:11px;color:var(--text);line-height:1.35;text-align:left;">'+escNote(nt)+'</span>'
+      : '<span style="font-size:15px;color:var(--text3);">＋</span>';
     const noteTd = '<td onclick="openAttNote(\''+day.dk+'\')" style="cursor:pointer;">'+noteCell+'</td>';
 
     return '<tr style="'+rowStyle+'">' +
