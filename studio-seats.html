@@ -1141,8 +1141,34 @@ const db = firebase.database();
 const DB_REF = db.ref('studio');
 
 // Firebase에서 데이터 불러오기 + 실시간 구독
+// 앱을 다시 켰을 때 화면을 최신으로 맞춰요
+//  · 5분 넘게 화면 밖에 있다가 돌아오면 → 자동 새로고침
+//  · 그보다 짧아도, 서버에 더 새로운 파일이 올라와 있으면 → 자동 새로고침
+let hiddenAt = 0;
+function reloadOnce() {
+  // 무한 새로고침 방지: 2분 안에 이미 했으면 다시 하지 않아요
+  try {
+    const last = Number(sessionStorage.getItem('faay_reload_at') || 0);
+    if(Date.now() - last < 120000) return;
+    sessionStorage.setItem('faay_reload_at', String(Date.now()));
+  } catch(e){}
+  location.reload();
+}
+function checkNewVersion() {
+  try {
+    fetch(location.pathname + '?_=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.text())
+      .then(t => { const m = t.match(/APP_VERSION\s*=\s*'([^']+)'/); if(m && m[1] !== APP_VERSION) reloadOnce(); })
+      .catch(() => {});
+  } catch(e){}
+}
 document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible') { try { db.goOffline(); db.goOnline(); } catch(e){} }   // 폰에서 앱으로 돌아오면 서버와 다시 연결
+  if(document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  if(away > 5*60*1000) { reloadOnce(); return; }
+  try { db.goOffline(); db.goOnline(); } catch(e){}   // 서버와 다시 연결
+  checkNewVersion();
 });
 
 function load() {
@@ -1517,7 +1543,7 @@ function renderUsageBar() {
 // 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
 // (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
 // 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
-const APP_VERSION = '2026.10.14-p';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
+const APP_VERSION = '2026.10.14-q';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
 const WARN_DAY = 15;
 const WARN_RATE = 50;
 function renderUsageWarning() {
