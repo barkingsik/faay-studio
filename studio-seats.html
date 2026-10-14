@@ -1517,7 +1517,7 @@ function renderUsageBar() {
 // 매월 WARN_DAY일에, 이번 달 사용률이 WARN_RATE% 이하인 학생에게 오전/오후 탭 아래에 안내를 보여줌
 // (사용률 = 출석기록 화면의 '출석률'과 같은 계산: 60시간 = 100%)
 // 미리보기: 주소 끝에 ?warntest 를 붙이면 날짜·기준과 상관없이 내 현재 사용률로 경고가 보여요
-const APP_VERSION = '2026.10.13-n';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
+const APP_VERSION = '2026.10.14-p';   // 출석기록 화면 아래쪽 안내 문구에 표시돼요 (올라간 파일 확인용)
 const WARN_DAY = 15;
 const WARN_RATE = 50;
 function renderUsageWarning() {
@@ -1623,7 +1623,7 @@ function myIdx() {
   const {resv, sched: sc, stat} = getDateData(dk, S.time);
   const resvArr = Array.isArray(resv) ? resv : Object.values(Object.assign(Array(9).fill(null), resv));
   const resvIdx = resvArr.indexOf(S.studentId);
-  if(resvIdx !== -1 && sc[resvIdx] && stat[resvIdx] === 'present') return -1;
+  // 예약한 자리는 입실 후에도 계속 내 자리 (원래 주인이 미사용 처리 → 내가 예약 → 입실)
   return resvIdx;
 }
 
@@ -1681,8 +1681,8 @@ const GEO_ERR_GUIDES = {
   unsupported: '이 기기는 위치 기능을 지원하지 않아요. 관리자에게 문의하세요.',
 };
 // 위치 확인 실행 (한 번에 하나만, 반드시 끝나도록 시간 제한). done(allowed, errType)
-function runGeoCheck(done) {
-  if(geoRunning) { if(done) setTimeout(()=>runGeoCheck(done), 1500); return; }
+function runGeoCheck(done, fresh) {
+  if(geoRunning) { if(done) setTimeout(()=>runGeoCheck(done, fresh), 1500); return; }
   geoRunning = true;
   let finished = false;
   const finish = (allowed, errType) => {
@@ -1692,7 +1692,7 @@ function runGeoCheck(done) {
     if(done) done(allowed, errType);
   };
   const dog = setTimeout(()=>finish(false,'timeout'), 35000);   // 어떤 경우에도 35초 안에 끝냄
-  checkGeoForCheckin((allowed, errType) => { clearTimeout(dog); finish(allowed, errType); });
+  checkGeoForCheckin((allowed, errType) => { clearTimeout(dog); finish(allowed, errType); }, fresh);
 }
 
 function updateLockBadge() {
@@ -1754,16 +1754,16 @@ function selectNoshowReason(reason) {
   doAction('noshow', reason);
 }
 
-function doAction(action, reason) {
+function doAction(action, reason, geoOk) {
   // 미사용은 날짜/위치 제한 없이 가능
   if(action !== 'noshow' && !isSelectedToday()){showToast('오늘만 변경할 수 있어요');return;}
-  // 입실/퇴실은 위치 확인 필요, 미사용은 어디서든 가능
-  if(action !== 'noshow' && D.location && S.geoAllowed !== true){
-    showToast('📍 위치를 확인하고 있어요... 잠시만요', 4000);
+  // 입실/퇴실은 누를 때마다 "지금" 위치를 새로 확인해요 (예전에 확인된 결과를 재사용하지 않음)
+  if(action !== 'noshow' && D.location && geoOk !== true){
+    showToast('📍 지금 위치를 확인하고 있어요... 잠시만요', 4000);
     runGeoCheck((allowed, errType) => {
-      if(allowed) doAction(action, reason);
+      if(allowed) doAction(action, reason, true);
       else showToast(GEO_ERR_GUIDES[errType] || GEO_ERR_GUIDES.outofrange, 6000);
-    });
+    }, true);
     return;
   }
   const idx=myIdx(); if(idx===-1)return;
@@ -1892,8 +1892,12 @@ function renderGridS() {
     const sid=sched[i],st=sid?stat[i]:'empty';
     const student=sid?byId(sid):null;
     const name=student?student.name:null;
-    const isMine=i===mi;
     const resvSid=resv[i];
+    // 원래 주인이 미사용 처리한 자리에 다른 학생이 예약해서 입실/퇴실한 경우 → 그 자리의 주인은 예약한 학생으로 보여줌
+    const occByResv=!!(sid && resvSid && resvSid!==sid && (st==='present'||st==='checkout'));
+    const occSid=occByResv?resvSid:sid;
+    const occStudent=occSid?byId(occSid):null;
+    const isMine=i===mi && (!occByResv || occSid===S.studentId);
     const resvStudent=resvSid?byId(resvSid):null;
     const isMyResv=resvSid===S.studentId;
     let dispSt='empty',label='',badgeHtml='',resvBtn=null;
@@ -1943,12 +1947,12 @@ function renderGridS() {
     if(sid){
       if(st==='noshow'&&!isMine) displayName=isMyResv?(resvStudent?resvStudent.name:''):'';
       else if(st==='noshow'&&isMine) displayName=(name||'')+(resvSid?' → '+(resvStudent?resvStudent.name:'예약자'):'');
-      else displayName=name||'비어있음';
+      else displayName=(occByResv?(occStudent?occStudent.name:null):name)||'비어있음';
     } else { displayName=resvSid?(resvStudent?resvStudent.name:'예약됨'):''; }
 
     const topDiv=document.createElement('div');
     topDiv.innerHTML='<div class="seat-num">'+slabel(i)+'</div>'+
-      (displayName?'<div class="seat-name" style="color:'+studentColor((sid&&!(st==='noshow'&&!isMine))?sid:resvSid)+'">'+displayName+'</div>':'')+
+      (displayName?'<div class="seat-name" style="color:'+studentColor(occByResv?occSid:((sid&&!(st==='noshow'&&!isMine))?sid:resvSid))+'">'+displayName+'</div>':'')+
       (timeStr?'<div style="font-size:9px;color:var(--teal);font-family:monospace;margin-top:3px;line-height:1.4;">'+timeStr+'</div>':'');
 
     const botDiv=document.createElement('div');
@@ -2803,9 +2807,11 @@ function renderGridA() {
     const tRecA=((sid||resvSid)&&D.dateTimes[dk]?.[S.adminTimeA]?.[i])||{};
     const timeStrA=[tRecA.in?'입실 '+tRecA.in:'', tRecA.out?'퇴실 '+tRecA.out:''].filter(Boolean).join(' ');
     let nameHtml = student ? '<span style="color:'+studentColor(student.id)+'">'+student.name+'</span>' : '';
-    if(resvStudent && student) nameHtml += ' <span style="font-size:10px;color:#FF28A7;">→ '+resvStudent.name+' 예약</span>';
-    if(resvStudent && !student) nameHtml = '<span style="color:#FF28A7;font-weight:700;">'+resvStudent.name+' (예약)</span>';
-    const resvBadge = resvSid ? '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>' : '';
+    const occByResvA = !!(sid && resvSid && resvSid!==sid && (st==='present'||st==='checkout'));
+    if(occByResvA && resvStudent) nameHtml = '<span style="color:'+studentColor(resvStudent.id)+'">'+resvStudent.name+'</span> <span style="font-size:10px;color:#FF28A7;">(예약 · '+(student?student.name:'')+' 자리)</span>';
+    else if(resvStudent && student) nameHtml += ' <span style="font-size:10px;color:#FF28A7;">→ '+resvStudent.name+' 예약</span>';
+    if(!occByResvA && resvStudent && !student) nameHtml = '<span style="color:#FF28A7;font-weight:700;">'+resvStudent.name+' (예약)</span>';
+    const resvBadge = (resvSid && !occByResvA) ? '<div class="float-badge" style="background:rgba(255,40,167,0.15);color:#FF28A7;border:1px solid #FF28A7;">예약중</div>' : '';
     const availBadge = isAvail&&sid&&!resvSid ? '<div class="float-badge badge-avail">사용가능</div>' : '';
     const card=document.createElement('div');
     card.className='seat-card '+dispSt+' clickable';
@@ -3177,7 +3183,7 @@ function calcDistance(lat1, lng1, lat2, lng2) {
 
 // 위치 확인 후 입실 처리
 // 위치 허용 여부 비동기 체크 (callback: true/false)
-function checkGeoForCheckin(callback) {
+function checkGeoForCheckin(callback, fresh) {
   if(!D.location) { callback(true); return; }
   if(!navigator.geolocation) { callback(false, 'unsupported'); return; }
   const judge = pos => {
@@ -3201,7 +3207,7 @@ function checkGeoForCheckin(callback) {
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
       );
     },
-    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: fresh ? 0 : 300000 }
   );
 }
 
